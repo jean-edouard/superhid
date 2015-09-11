@@ -348,25 +348,51 @@ xenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   return -1;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+  dominfo_t di;
+  usbinfo_t ui;
+  int domid, ret;
+
+  if (argc != 2)
+    return 1;
+
+  /* Init XenStore */
   if (xs_handle == NULL) {
     xs_handle = xs_daemon_open();
   }
-
   if (xs_handle == NULL) {
     xd_log(LOG_ERR, "Failed to connect to xenstore");
     return 1;
   }
-
   if (xs_dom0path == NULL) {
     xs_dom0path = xs_get_domain_path(xs_handle, 0);
   }
-
   if (xs_dom0path == NULL) {
     xd_log(LOG_ERR, "Could not get domain 0 path from XenStore");
     return 1;
   }
+
+  /* Fill the domain info */
+  domid = strtol(argv[1], NULL, 10);
+  ret = xenstore_get_dominfo(domid, &di);
+  if (ret != 0) {
+    xd_log(LOG_ERR, "Invalid domid %d", domid);
+    return 1;
+  }
+
+  /* Fill the device info */
+  ui.usb_virtid = 4242;
+  ui.usb_bus = 42;
+  ui.usb_device = 42;
+  ui.usb_vendor = 0x03eb;
+  ui.usb_product = 0x211c;
+
+  /* Do stuffs */
+  xenstore_create_usb(&di, &ui);
+
+  /* Cleanup */
+  xs_daemon_close(xs_handle);
 
   return 0;
 }
