@@ -55,11 +55,16 @@
 #include <sys/int_types.h>
 #endif
 
+#include <sys/mman.h>
 #include <syslog.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <getopt.h>
 #include <xenstore.h>
+#include <xenctrl.h>
+#include <xenbackend.h>
+
+#include "usbif.h"
 
 /**
  * The (stupid) logging macro
@@ -87,8 +92,28 @@ enum XenBusStates {
   XB_CLOSING, XB_CLOSED
 };
 
+struct superhid_device
+{
+    xen_backend_t backend;
+    int devid;
+    void *page;
+};
+
+struct superhid_backend
+{
+    xen_backend_t backend;
+    int domid;
+    struct superhid_device *device;
+};
+
 struct xs_handle *xs_handle; /**< The global xenstore handle, initialized by xenstore_init() */
+static xc_interface *xc_handle = NULL;
 char *xs_dom0path = NULL;
+usbif_back_ring_t back_ring;
+int back_ring_ready = 0;
+struct superhid_backend *backend = NULL;
+struct superhid_device *dev = NULL;
+int evtfd = -1;
 
 static void*
 xmalloc(size_t size)
@@ -348,11 +373,140 @@ xenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   return -1;
 }
 
+void consume_requests(void)
+{
+  RING_IDX rc, rp;
+  usbif_request_t req;
+
+  if (back_ring_ready != 1) {
+    printf("not ready to consume\n");
+    return;
+  }
+
+  rc = back_ring.req_cons;
+  rp = back_ring.sring->req_prod;
+  while (rc != rp)
+  {
+    memcpy(&req, RING_GET_REQUEST(&back_ring, rc), sizeof(req));
+    back_ring.req_cons = ++rc;
+    printf("GOT REQUEST %d\n", req.id);
+  }
+  printf("%d == %d\n", rc, rp);
+}
+
+static xen_device_t
+superhid_alloc(xen_backend_t backend, int devid, void *priv)
+{
+    struct superhid_backend *back = priv;
+    struct superhid_device *dev;
+
+    dev = malloc(sizeof (*dev));
+    memset(dev, 0, sizeof(*dev));
+
+    dev->devid = devid;
+    dev->backend = backend;
+
+    back->device = dev;
+
+    return dev;
+}
+
+static int
+superhid_init(xen_device_t xendev)
+{
+    struct superhid_device *dev = xendev;
+
+    printf("init\n");
+    backend_print(dev->backend, dev->devid, "version", "3");
+    backend_print(dev->backend, dev->devid, "feature-barrier", "1");
+
+    return 0;
+}
+
+static int
+superhid_connect(xen_device_t xendev)
+{
+    dev = xendev;
+    printf("connect\n");
+
+    evtfd = backend_bind_evtchn(dev->backend, dev->devid);
+    if (evtfd < 0)
+        return -1;
+
+    dev->page = backend_map_shared_page(dev->backend, dev->devid);
+    if (!dev->page)
+        return -1;
+
+    BACK_RING_INIT(&back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
+    back_ring_ready = 1;
+
+    return 0;
+}
+
+
+static void
+superhid_disconnect(xen_device_t xendev)
+{
+    struct superhid_device *dev = xendev;
+
+    printf("disconnect\n");
+}
+
+static void backend_changed(xen_device_t xendev,
+                            const char *node,
+                            const char *val)
+{
+  printf("backend changed\n");
+}
+
+static void frontend_changed(xen_device_t xendev,
+                             const char *node,
+                             const char *val)
+{
+  printf("frontend changed\n");
+}
+
+static void
+superhid_event(xen_device_t xendev)
+{
+    struct superhid_device *dev = xendev;
+
+    consume_requests();
+}
+
+static void
+superhid_free(xen_device_t xendev)
+{
+    struct superhid_device *dev = xendev;
+
+    superhid_disconnect(xendev);
+
+    free(dev);
+}
+
+
+static struct xen_backend_ops superhid_backend_ops = {
+    superhid_alloc,
+    superhid_init,
+    superhid_connect,
+    superhid_disconnect,
+    NULL,
+    NULL,
+    superhid_event,
+    superhid_free
+};
+
 int main(int argc, char **argv)
 {
   dominfo_t di;
   usbinfo_t ui;
   int domid, ret;
+  char path[256], token[256];
+  char* res;
+  int ring, evtchn, fd;
+  xc_evtchn *ec;
+  char *page;
+  fd_set fds;
 
   if (argc != 2)
     return 1;
@@ -361,6 +515,12 @@ int main(int argc, char **argv)
   if (xs_handle == NULL) {
     xs_handle = xs_daemon_open();
   }
+  if (xs_handle == NULL) {
+    xd_log(LOG_ERR, "Failed to connect to xenstore");
+    return 1;
+  }
+  if (xc_handle == NULL)
+    xc_handle = xc_interface_open(NULL, NULL, 0);
   if (xs_handle == NULL) {
     xd_log(LOG_ERR, "Failed to connect to xenstore");
     return 1;
@@ -382,17 +542,49 @@ int main(int argc, char **argv)
   }
 
   /* Fill the device info */
-  ui.usb_virtid = 4242;
-  ui.usb_bus = 42;
-  ui.usb_device = 42;
+  ui.usb_virtid = 1;
+  ui.usb_bus = 1;
+  ui.usb_device = 1;
   ui.usb_vendor = 0x03eb;
   ui.usb_product = 0x211c;
 
   /* Do stuffs */
+  if (backend_init(0))
+    printf("barf\n");
+  backend = malloc(sizeof (*backend));
+  backend->domid = di.di_domid;
+  backend->backend = backend_register("vusb", di.di_domid, &superhid_backend_ops, backend);
+  if (!backend->backend)
+  {
+    printf("failed\n");
+    free(backend);
+    return 1;
+  }
+  fd = backend_xenstore_fd();
+
   xenstore_create_usb(&di, &ui);
+
+  do {
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+    select(fd + 1, &fds, NULL, NULL, NULL);
+    printf("fd fired\n");
+    backend_xenstore_handler(NULL);
+
+    if (evtfd != -1) {
+      FD_ZERO(&fds);
+      FD_SET(evtfd, &fds);
+      select(evtfd + 1, &fds, NULL, NULL, NULL);
+      printf("evtfd fired\n");
+      if (dev != NULL)
+        backend_evtchn_handler(backend_evtchn_priv(dev->backend, dev->devid));
+    }
+  } while (1);
+  xc_evtchn_close(ec);
 
   /* Cleanup */
   xs_daemon_close(xs_handle);
+  xc_interface_close(xc_handle);
 
   return 0;
 }

@@ -1,3 +1,5 @@
+*~
+*.o
 aclocal-copy/
 config.guess
 config.sub
@@ -12,3 +14,7 @@ configure
 depcomp
 install-sh
 missing
+config.h
+config.h.in
+src/stamp-h1
+src/superhid
