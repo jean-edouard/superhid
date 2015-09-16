@@ -64,6 +64,8 @@
 #include <xenctrl.h>
 #include <xenbackend.h>
 
+#include <linux/usb/ch9.h>
+
 #include "usbif.h"
 
 /**
@@ -94,26 +96,25 @@ enum XenBusStates {
 
 struct superhid_device
 {
-    xen_backend_t backend;
-    int devid;
-    void *page;
+  xen_backend_t backend;
+  int devid;
+  void *page;
 };
 
 struct superhid_backend
 {
-    xen_backend_t backend;
-    int domid;
-    struct superhid_device *device;
+  xen_backend_t backend;
+  int domid;
+  struct superhid_device *device;
 };
 
-struct xs_handle *xs_handle; /**< The global xenstore handle, initialized by xenstore_init() */
-static xc_interface *xc_handle = NULL;
+static struct xs_handle *xs_handle;
 char *xs_dom0path = NULL;
 usbif_back_ring_t back_ring;
 int back_ring_ready = 0;
 struct superhid_backend *backend = NULL;
-struct superhid_device *dev = NULL;
 int evtfd = -1;
+void *priv = NULL;
 
 static void*
 xmalloc(size_t size)
@@ -160,7 +161,6 @@ xenstore_add_dir(xs_transaction_t xt, char *path, int d0, int p0, int d1, int p1
 {
   struct xs_permissions perms[2];
 
-  xd_log(LOG_VERBOSE_DEBUG, "Making %s in XenStore", path);
   if (xs_mkdir(xs_handle, xt, path) == false) {
     xd_log(LOG_ERR, "XenStore error mkdir()ing %s", path);
     return -1;
@@ -261,7 +261,6 @@ xenstore_set_keyval(xs_transaction_t xt, char *path, char *key, char *val)
     snprintf(tmppath, sizeof (tmppath), "%s/%s", path, key);
     path = tmppath;
   }
-  xd_log(LOG_VERBOSE_DEBUG, "Writing to XenStore: %s = %s", path, val);
 
   if (xs_write(xs_handle, xt, path, val, strlen(val)) == false) {
     xd_log(LOG_ERR, "XenStore error writing %s", path);
@@ -359,9 +358,6 @@ xenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
     free(fepath);
     free(bepath);
 
-    xd_log(LOG_DEBUG, "Finished creating VUSB node for %d.%d",
-           usbp->usb_bus, usbp->usb_device);
-
     return 0;
   }
 
@@ -377,123 +373,161 @@ void consume_requests(void)
 {
   RING_IDX rc, rp;
   usbif_request_t req;
+  usbif_response_t rsp;
 
   if (back_ring_ready != 1) {
     printf("not ready to consume\n");
     return;
   }
 
-  rc = back_ring.req_cons;
-  rp = back_ring.sring->req_prod;
-  while (rc != rp)
+  /* for (int i = 0; i < 42; ++i) */
+  /*   printf("%02X ", ((char *)dev->page)[i]); */
+  /* printf("\n"); */
+
+  /* while (!RING_HAS_UNCONSUMED_REQUESTS(&back_ring)) */
+  /*   ; */
+  while (RING_HAS_UNCONSUMED_REQUESTS(&back_ring))
   {
-    memcpy(&req, RING_GET_REQUEST(&back_ring, rc), sizeof(req));
-    back_ring.req_cons = ++rc;
-    printf("GOT REQUEST %d\n", req.id);
+    memcpy(&req, RING_GET_REQUEST(&back_ring, back_ring.req_cons), sizeof(req));
+    printf("***** GOT REQUEST *****\n", req.id, req.type);
+    printf("id=%d\n", req.id);
+    printf("setup=%d\n", req.setup);
+    printf("type=%d\n", req.type);
+    printf("endpoint=%d\n", req.endpoint);
+    printf("offset=%d\n", req.offset);
+    printf("length=%d\n", req.length);
+    printf("nr_segments=%d\n", req.nr_segments);
+    printf("flags=%d\n", req.flags);
+    printf("nr_packets=%d\n", req.nr_packets);
+    printf("startframe=%d\n", req.startframe);
+    printf("***********************\n");
+    if (req.type == USBIF_T_GET_SPEED) {
+      rsp.id            = req.id;
+      rsp.actual_length = 0;
+      rsp.data          = USB_SPEED_HIGH;
+      rsp.status        = USBIF_RSP_OKAY;
+      memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
+      back_ring.rsp_prod_pvt++;
+      RING_PUSH_RESPONSES(&back_ring);
+      backend_evtchn_notify(backend->backend, backend->device->devid);
+    }
+    back_ring.req_cons++;
   }
-  printf("%d == %d\n", rc, rp);
 }
 
 static xen_device_t
 superhid_alloc(xen_backend_t backend, int devid, void *priv)
 {
-    struct superhid_backend *back = priv;
-    struct superhid_device *dev;
+  struct superhid_backend *back = priv;
+  struct superhid_device *dev = back->device;
 
-    dev = malloc(sizeof (*dev));
-    memset(dev, 0, sizeof(*dev));
+  /* printf("alloc %p %d %p\n", backend, devid, priv); */
+  dev = malloc(sizeof(*dev));
+  memset(dev, 0, sizeof(*dev));
 
-    dev->devid = devid;
-    dev->backend = backend;
+  dev->devid = devid;
+  dev->backend = backend;
+  back->device = dev;
 
-    back->device = dev;
-
-    return dev;
+  return dev;
 }
 
 static int
 superhid_init(xen_device_t xendev)
 {
-    struct superhid_device *dev = xendev;
+  struct superhid_device *dev = xendev;
 
-    printf("init\n");
-    backend_print(dev->backend, dev->devid, "version", "3");
-    backend_print(dev->backend, dev->devid, "feature-barrier", "1");
+  /* printf("init %p\n", xendev); */
+  backend_print(dev->backend, dev->devid, "version", "3");
+  backend_print(dev->backend, dev->devid, "feature-barrier", "1");
 
-    return 0;
+  return 0;
 }
 
 static int
 superhid_connect(xen_device_t xendev)
 {
-    dev = xendev;
-    printf("connect\n");
+  struct superhid_device *dev = xendev;
+  char path[256];
+  char *res;
 
-    evtfd = backend_bind_evtchn(dev->backend, dev->devid);
-    if (evtfd < 0)
-        return -1;
+  /* printf("connect %p\n", xendev); */
 
-    dev->page = backend_map_shared_page(dev->backend, dev->devid);
-    if (!dev->page)
-        return -1;
+  evtfd = backend_bind_evtchn(dev->backend, dev->devid);
+  priv = backend_evtchn_priv(dev->backend, dev->devid);
+  if (evtfd < 0) {
+    printf("failed to bind evtchn\n");
+    return -1;
+  }
 
-    BACK_RING_INIT(&back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
-    back_ring_ready = 1;
+  dev->page = backend_map_granted_ring(dev->backend, dev->devid);
+  if (!dev->page) {
+    printf("failed to map page\n");
+    return -1;
+  }
 
-    return 0;
+  BACK_RING_INIT(&back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
+  back_ring_ready = 1;
+
+  return 0;
 }
 
 
 static void
 superhid_disconnect(xen_device_t xendev)
 {
-    struct superhid_device *dev = xendev;
+  struct superhid_device *dev = xendev;
 
-    printf("disconnect\n");
+  /* TODO: something */
+  (void)dev;
+
+  printf("disconnect\n");
 }
 
-static void backend_changed(xen_device_t xendev,
-                            const char *node,
-                            const char *val)
+static void superhid_backend_changed(xen_device_t xendev,
+                                     const char *node,
+                                     const char *val)
 {
-  printf("backend changed\n");
+  /* printf("backend changed: %s=%s\n", node, val); */
 }
 
-static void frontend_changed(xen_device_t xendev,
-                             const char *node,
-                             const char *val)
+static void superhid_frontend_changed(xen_device_t xendev,
+                                      const char *node,
+                                      const char *val)
 {
-  printf("frontend changed\n");
+  /* printf("frontend changed: %s=%s\n", node, val); */
 }
 
 static void
 superhid_event(xen_device_t xendev)
 {
-    struct superhid_device *dev = xendev;
+  struct superhid_device *dev = xendev;
 
-    consume_requests();
+  /* printf("event %p\n", xendev); */
+  consume_requests();
 }
 
 static void
 superhid_free(xen_device_t xendev)
 {
-    struct superhid_device *dev = xendev;
+  struct superhid_device *dev = xendev;
 
-    superhid_disconnect(xendev);
+  /* printf("free %p\n", xendev); */
+  superhid_disconnect(xendev);
 
-    free(dev);
+  free(dev);
 }
 
 
 static struct xen_backend_ops superhid_backend_ops = {
-    superhid_alloc,
-    superhid_init,
-    superhid_connect,
-    superhid_disconnect,
-    NULL,
-    NULL,
-    superhid_event,
-    superhid_free
+  superhid_alloc,
+  superhid_init,
+  superhid_connect,
+  superhid_disconnect,
+  superhid_backend_changed,
+  superhid_frontend_changed,
+  superhid_event,
+  superhid_free
 };
 
 int main(int argc, char **argv)
@@ -515,12 +549,6 @@ int main(int argc, char **argv)
   if (xs_handle == NULL) {
     xs_handle = xs_daemon_open();
   }
-  if (xs_handle == NULL) {
-    xd_log(LOG_ERR, "Failed to connect to xenstore");
-    return 1;
-  }
-  if (xc_handle == NULL)
-    xc_handle = xc_interface_open(NULL, NULL, 0);
   if (xs_handle == NULL) {
     xd_log(LOG_ERR, "Failed to connect to xenstore");
     return 1;
@@ -551,8 +579,9 @@ int main(int argc, char **argv)
   /* Do stuffs */
   if (backend_init(0))
     printf("barf\n");
-  backend = malloc(sizeof (*backend));
+  backend = malloc(sizeof(*backend));
   backend->domid = di.di_domid;
+  backend->device = NULL;
   backend->backend = backend_register("vusb", di.di_domid, &superhid_backend_ops, backend);
   if (!backend->backend)
   {
@@ -565,26 +594,33 @@ int main(int argc, char **argv)
   xenstore_create_usb(&di, &ui);
 
   do {
+    int fdmax = fd;
+
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
-    select(fd + 1, &fds, NULL, NULL, NULL);
-    printf("fd fired\n");
-    backend_xenstore_handler(NULL);
-
-    if (evtfd != -1) {
-      FD_ZERO(&fds);
+    if (evtfd != -1)
+    {
       FD_SET(evtfd, &fds);
-      select(evtfd + 1, &fds, NULL, NULL, NULL);
-      printf("evtfd fired\n");
-      if (dev != NULL)
-        backend_evtchn_handler(backend_evtchn_priv(dev->backend, dev->devid));
+      if (evtfd > fd)
+        fdmax = evtfd;
+    }
+
+    select(fdmax + 1, &fds, NULL, NULL, NULL);
+
+    if (FD_ISSET(fd, &fds)) {
+      /* printf("fd fired\n"); */
+      backend_xenstore_handler(NULL);
+    }
+    if (evtfd != -1 && FD_ISSET(evtfd, &fds)) {
+      /* printf("evtfd fired\n"); */
+      if (priv != NULL)
+        backend_evtchn_handler(priv);
     }
   } while (1);
   xc_evtchn_close(ec);
 
   /* Cleanup */
   xs_daemon_close(xs_handle);
-  xc_interface_close(xc_handle);
 
   return 0;
 }
