@@ -88,37 +88,37 @@
 #define REPORT_ID_INVALID       0xff
 
 /* This is a relative mouse with 5 buttons and a vertical wheel. */
-#define MOUSE\
-  0x05, 0x01,                   /* USAGE_PAGE (Generic Desktop)     */ \
-    0x09, 0x02,                 /* USAGE (Mouse)                    */ \
-    0xa1, 0x01,                 /* COLLECTION (Application)         */ \
-    0x85, REPORT_ID_MOUSE,      /*   REPORT_ID (2)                  */ \
-    0x09, 0x01,                 /*   USAGE (Pointer)                */ \
-    0xa1, 0x00,                 /*   COLLECTION (Physical)          */ \
-    0x05, 0x09,                 /*     USAGE_PAGE (Button)          */ \
-    0x19, 0x01,                 /*     USAGE_MINIMUM (Button 1)     */ \
-    0x29, 0x05,                 /*     USAGE_MAXIMUM (Button 5)     */ \
-    0x15, 0x00,                 /*     LOGICAL_MINIMUM (0)          */ \
-    0x25, 0x01,                 /*     LOGICAL_MAXIMUM (1)          */ \
-    0x95, 0x05,                 /*     REPORT_COUNT (5)             */ \
-    0x75, 0x01,                 /*     REPORT_SIZE (1)              */ \
-    0x81, 0x02,                 /*     INPUT (Data,Var,Abs)         */ \
-    0x95, 0x01,                 /*     REPORT_COUNT (1)             */ \
-    0x75, 0x03,                 /*     REPORT_SIZE (3)              */ \
-    0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */ \
-    0x05, 0x01,                 /*     USAGE_PAGE (Generic Desktop) */ \
-    0x09, 0x30,                 /*     USAGE (X)                    */ \
-    0x09, 0x31,                 /*     USAGE (Y)                    */ \
-    0x09, 0x38,                 /*     USAGE (Z)                    */ \
-    0x15, 0x81,                 /*     LOGICAL_MINIMUM (-127)       */ \
-    0x25, 0x7f,                 /*     LOGICAL_MAXIMUM (127)        */ \
-    0x75, 0x08,                 /*     REPORT_SIZE (8)              */ \
-    0x95, 0x03,                 /*     REPORT_COUNT (3)             */ \
-    0x81, 0x06,                 /*     INPUT (Data,Var,Rel)         */ \
-    0x95, 0x01,                 /*     REPORT_COUNT (1)             */ \
-    0x75, 0x08,                 /*     REPORT_SIZE (8)              */ \
-    0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */ \
-    0xc0,                       /*   END_COLLECTION                 */ \
+#define MOUSE                                                           \
+  0x05, 0x01,                   /* USAGE_PAGE (Generic Desktop)     */  \
+    0x09, 0x02,                 /* USAGE (Mouse)                    */  \
+    0xa1, 0x01,                 /* COLLECTION (Application)         */  \
+    0x85, REPORT_ID_MOUSE,      /*   REPORT_ID (2)                  */  \
+    0x09, 0x01,                 /*   USAGE (Pointer)                */  \
+    0xa1, 0x00,                 /*   COLLECTION (Physical)          */  \
+    0x05, 0x09,                 /*     USAGE_PAGE (Button)          */  \
+    0x19, 0x01,                 /*     USAGE_MINIMUM (Button 1)     */  \
+    0x29, 0x05,                 /*     USAGE_MAXIMUM (Button 5)     */  \
+    0x15, 0x00,                 /*     LOGICAL_MINIMUM (0)          */  \
+    0x25, 0x01,                 /*     LOGICAL_MAXIMUM (1)          */  \
+    0x95, 0x05,                 /*     REPORT_COUNT (5)             */  \
+    0x75, 0x01,                 /*     REPORT_SIZE (1)              */  \
+    0x81, 0x02,                 /*     INPUT (Data,Var,Abs)         */  \
+    0x95, 0x01,                 /*     REPORT_COUNT (1)             */  \
+    0x75, 0x03,                 /*     REPORT_SIZE (3)              */  \
+    0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */  \
+    0x05, 0x01,                 /*     USAGE_PAGE (Generic Desktop) */  \
+    0x09, 0x30,                 /*     USAGE (X)                    */  \
+    0x09, 0x31,                 /*     USAGE (Y)                    */  \
+    0x09, 0x38,                 /*     USAGE (Z)                    */  \
+    0x15, 0x81,                 /*     LOGICAL_MINIMUM (-127)       */  \
+    0x25, 0x7f,                 /*     LOGICAL_MAXIMUM (127)        */  \
+    0x75, 0x08,                 /*     REPORT_SIZE (8)              */  \
+    0x95, 0x03,                 /*     REPORT_COUNT (3)             */  \
+    0x81, 0x06,                 /*     INPUT (Data,Var,Rel)         */  \
+    0x95, 0x01,                 /*     REPORT_COUNT (1)             */  \
+    0x75, 0x08,                 /*     REPORT_SIZE (8)              */  \
+    0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */  \
+    0xc0,                       /*   END_COLLECTION                 */  \
     0xc0                        /* END_COLLECTION                   */
 
 typedef struct dominfo
@@ -418,27 +418,17 @@ xenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   return -1;
 }
 
-
-
 struct hid_descriptor {
   __u8  bLength;
   __u8  bDescriptorType;
   __le16 bcdHID;
   __u8  bCountryCode;
   __u8  bNumDescriptors;
-
-  /* struct hid_class_descriptor desc[1]; */
+  __u8  bAddDescriptorType;
+  __u16 wAddDescriptorLength;
 } __attribute__ ((packed));
 
-static struct hid_descriptor hid_dt_desc = {
-  .bLength= sizeof(struct hid_descriptor),
-  .bDescriptorType= HID_DT_HID,
-  .bcdHID= 0x0101,
-  .bCountryCode= 0x00,
-  .bNumDescriptors= 0x1,
-};
-
-struct hid_desc {
+struct hid_report_desc {
   unsigned char         subclass;
   unsigned char         protocol;
   unsigned short        report_length;
@@ -451,11 +441,11 @@ static struct feature_report {
   char value;
 };
 
-struct hid_desc superhid_desc = {
+struct hid_report_desc superhid_desc = {
   .subclass= 0, /* No subclass */
   .protocol= 0,
-  .report_length= 8,
-  .report_desc_length= 144,
+  .report_length = 8,
+  .report_desc_length = 144,
   /* Length without the mouse: */
   /* .report_desc_length= 84, */
   .report_desc= {
@@ -504,10 +494,96 @@ struct hid_desc superhid_desc = {
   }
 };
 
+static struct usb_device_descriptor device_desc = {
+  .bLength = USB_DT_DEVICE_SIZE,
+  .bDescriptorType = USB_DT_DEVICE,
+
+  .bcdUSB = 0x0200,
+
+  /* .bDeviceClass =USB_CLASS_COMM, */
+  /* .bDeviceSubClass =0, */
+  /* .bDeviceProtocol =0, */
+  .bDeviceClass = USB_CLASS_PER_INTERFACE,
+  .bDeviceSubClass = 0,
+  .bDeviceProtocol = 0,
+  .bMaxPacketSize0 = 64,
+
+  /* Vendor and product id can be overridden by module parameters.  */
+  .idVendor = 0x03eb,
+  .idProduct = 0x211c,
+  /* .bcdDevice = f(hardware) */
+  /* .iManufacturer = DYNAMIC */
+  /* .iProduct = DYNAMIC */
+  /* NO SERIAL NUMBER */
+  .bNumConfigurations = 1,
+};
+
+static struct usb_config_descriptor config_desc = {
+  .bLength = USB_DT_CONFIG_SIZE,
+  .bDescriptorType = USB_DT_CONFIG,
+  .wTotalLength = USB_DT_CONFIG_SIZE +
+                  USB_DT_INTERFACE_SIZE +
+                  sizeof(struct hid_descriptor) +
+                  USB_DT_ENDPOINT_SIZE * 2,
+  .bNumInterfaces = 1,
+  .bConfigurationValue = 1,
+  .iConfiguration = 0,
+  .bmAttributes = USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
+  .bMaxPower = 50,
+};
+
+static struct usb_bos_descriptor bos_desc = {
+  .bLength = USB_DT_BOS_SIZE,
+  .bDescriptorType = USB_DT_BOS,
+  .wTotalLength = USB_DT_BOS_SIZE,
+  .bNumDeviceCaps = 0,
+};
+
+static struct usb_interface_descriptor interface_desc = {
+	.bLength		= USB_DT_INTERFACE_SIZE,
+	.bDescriptorType	= USB_DT_INTERFACE,
+	/* .bInterfaceNumber	= DYNAMIC */
+	.bAlternateSetting	= 0,
+	.bNumEndpoints		= 2,
+	.bInterfaceClass	= USB_CLASS_HID,
+	/* .bInterfaceSubClass	= DYNAMIC, */
+	/* .bInterfaceProtocol	= DYNAMIC, */
+	/* .iInterface		= DYNAMIC, */
+};
+
+static struct hid_descriptor hid_desc = {
+  .bLength = sizeof(struct hid_descriptor),
+  .bDescriptorType = HID_DT_HID,
+  .bcdHID = 0x0101,
+  .bCountryCode = 0x00,
+  .bNumDescriptors = 0x1,
+  .bAddDescriptorType = HID_DT_REPORT,
+  /* .bAddDescriptorLength = DYNAMIC, */
+};
+
+static struct usb_endpoint_descriptor endpoint_in_desc = {
+  .bLength		= USB_DT_ENDPOINT_SIZE,
+  .bDescriptorType	= USB_DT_ENDPOINT,
+  .bEndpointAddress	= USB_DIR_IN | 0x1,
+  .bmAttributes		= USB_ENDPOINT_XFER_INT,
+  /* .wMaxPacketSize	= DYNAMIC, */
+  .bInterval		= 4,
+};
+
+static struct usb_endpoint_descriptor endpoint_out_desc = {
+  .bLength		= USB_DT_ENDPOINT_SIZE,
+  .bDescriptorType	= USB_DT_ENDPOINT,
+  .bEndpointAddress	= USB_DIR_OUT | 0x2,
+  .bmAttributes		= USB_ENDPOINT_XFER_INT,
+  /* .wMaxPacketSize	= DYNAMIC, */
+  .bInterval		= 4,
+};
+
 static int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
 {
   __u16 value, length;
   struct feature_report feature;
+  int total;
 
   value = setup->wValue;
   length = setup->wLength;
@@ -515,7 +591,7 @@ static int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
   switch ((setup->bRequestType << 8) | setup->bRequest) {
   case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_GET_REPORT):
-    printf("get_report\n");
+    printf("INTERFACE GET REPORT\n");
 
     if ((value & 0xFF) == 0x10)
     {
@@ -544,34 +620,111 @@ static int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
 
   case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_GET_PROTOCOL):
-    printf("get_protocol\n");
+    printf("INTERFACE GET PROTOCOL\n");
     goto stall;
     break;
 
   case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_SET_REPORT):
-    printf("set_report | wLenght=%d\n", setup->wLength);
+    printf("INTERFACE SET REPORT\n");
     goto stall;
     break;
 
   case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_SET_PROTOCOL):
-    printf("set_protocol\n");
+    printf("INTERFACE SET PROTOCOL\n");
     goto stall;
     break;
 
+  case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
+        | USB_REQ_GET_DESCRIPTOR):
+    printf("DEVICE GET DESCRIPTOR\n");
+    switch (value >> 8) {
+    case USB_DT_DEVICE:
+      if (sizeof(device_desc) < length)
+        length = sizeof(device_desc);
+      memcpy(buf, &device_desc, length);
+      goto respond;
+      break;
+    case USB_DT_CONFIG:
+      total = 0;
+      memcpy(buf + total, &config_desc, sizeof(config_desc));
+      total += sizeof(config_desc);
+      printf("%d ", total);
+      if (total > length) {
+        printf("skipping interface\n");
+        goto skipshit;
+      }
+      memcpy(buf + total, &interface_desc, sizeof(interface_desc));
+      total += sizeof(interface_desc);
+      printf("%d ", total);
+      if (total > length) {
+        printf("skipping hid\n");
+        goto skipshit;
+      }
+      memcpy(buf + total, &hid_desc, sizeof(hid_desc));
+      total += sizeof(hid_desc);
+      printf("%d ", total);
+      if (total > length) {
+        printf("skipping endpoint 1\n");
+        goto skipshit;
+      }
+      memcpy(buf + total, &endpoint_in_desc, USB_DT_ENDPOINT_SIZE);
+      total += USB_DT_ENDPOINT_SIZE;
+      printf("%d ", total);
+      if (total > length) {
+        printf("skipping endpoint 2\n");
+        goto skipshit;
+      }
+      memcpy(buf + total, &endpoint_out_desc, USB_DT_ENDPOINT_SIZE);
+      total += USB_DT_ENDPOINT_SIZE;
+      printf("%d\n", total);
+      if (total > length) {
+        printf("NOT ENOUGH ROOM!\n");
+      }
+    skipshit:
+      if (total < length)
+        length = total;
+      goto respond;
+      break;
+    case USB_DT_BOS:
+      if (sizeof(bos_desc) < length)
+        length = sizeof(bos_desc);
+      memcpy(buf, &bos_desc, length);
+      goto respond;
+      break;
+    /* case USB_DT_INTERFACE: */
+    /*   if (sizeof(interface_desc) < length) */
+    /*     length = sizeof(interface_desc); */
+    /*   memcpy(buf, &interface_desc, length); */
+    /*   goto respond; */
+    /*   break; */
+    }
+    break;
+  case ((USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
+        | USB_REQ_SET_CONFIGURATION):
+    printf("DEVICE SET CONFIGURATION\n");
+    length = 0;
+    goto respond;
+    break;
+  case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
+        | USB_REQ_GET_CONFIGURATION):
+    printf("DEVICE GET CONFIGURATION\n");
+    length = 1;
+    memcpy(buf, "1", length);
+    goto respond;
+    break;
   case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) << 8
         | USB_REQ_GET_DESCRIPTOR):
+    printf("INTERFACE GET DESCRIPTOR\n");
     switch (value >> 8) {
     case HID_DT_HID:
-      printf("USB_REQ_GET_DESCRIPTOR: HID\n");
-      if (hid_dt_desc.bLength < length)
-        length = hid_dt_desc.bLength;
-      memcpy(buf, &hid_dt_desc, length);
+      if (hid_desc.bLength < length)
+        length = hid_desc.bLength;
+      memcpy(buf, &hid_desc, length);
       goto respond;
       break;
     case HID_DT_REPORT:
-      printf("USB_REQ_GET_DESCRIPTOR: REPORT\n");
       if (superhid_desc.report_desc_length < length)
         length = superhid_desc.report_desc_length;
       memcpy(buf, superhid_desc.report_desc, length);
@@ -580,7 +733,7 @@ static int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
 
     default:
       printf("Unknown descriptor request 0x%x\n",
-           value >> 8);
+             value >> 8);
       goto stall;
       break;
     }
@@ -588,13 +741,13 @@ static int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
 
   default:
     printf("Unknown request 0x%x\n",
-         setup->bRequest);
+           setup->bRequest);
     goto stall;
     break;
   }
 
 stall:
-  return 0;
+  return -1;
 
 respond:
   return length;
@@ -623,48 +776,66 @@ void consume_requests(void)
     memcpy(&req, RING_GET_REQUEST(&back_ring, back_ring.req_cons), sizeof(req));
     printf("***** GOT REQUEST *****\n", req.id, req.type);
     printf("id=%d\n", req.id);
-    printf("setup=%d\n", req.setup);
-    printf("type=%d\n", req.type);
+    printf("setup=%X\n", req.setup);
+    printf("type=%X\n", req.type);
     printf("endpoint=%d\n", req.endpoint);
-    printf("offset=%d\n", req.offset);
+    printf("offset=%X\n", req.offset);
     printf("length=%d\n", req.length);
     printf("nr_segments=%d\n", req.nr_segments);
-    printf("flags=%d\n", req.flags);
+    printf("flags=%X\n", req.flags);
     printf("nr_packets=%d\n", req.nr_packets);
     printf("startframe=%d\n", req.startframe);
-    responded = 0;
+    responded = -1;
     if (req.type == USBIF_T_GET_SPEED) {
       rsp.id            = req.id;
       rsp.actual_length = 0;
-      rsp.data          = USB_SPEED_HIGH;
+      rsp.data          = USBIF_S_HIGH;
       rsp.status        = USBIF_RSP_OKAY;
-      responded = 1;
+      responded = 0;
     }
     if (req.type == USBIF_T_RESET) {
       rsp.id            = req.id;
       rsp.actual_length = 0;
       rsp.data          = 0;
       rsp.status        = USBIF_RSP_OKAY;
-      responded = 1;
+      responded = 0;
     }
     if (req.setup != 0) {
       struct usb_ctrlrequest setup;
-      void *buf;
+      void *buf = NULL;
 
       memcpy(&setup, &req.setup, sizeof(struct usb_ctrlrequest));
       printf("SETUP.bRequestType=%X\n", setup.bRequestType);
       printf("SETUP.bRequest=%X\n", setup.bRequest);
       printf("SETUP.wValue=%X\n", setup.wValue);
       printf("SETUP.wIndex=%X\n", setup.wIndex);
-      printf("SETUP.wLength=%X\n", setup.wLength);
+      printf("SETUP.wLength=%d\n", setup.wLength);
       printf("SETUP ");
-      buf = xc_gnttab_map_grant_ref(xcg_handle,
-                                    backend->domid,
-                                    req.u.gref[req.startframe],
-                                    PROT_READ | PROT_WRITE);
-      responded = superhid_setup(&setup, buf + req.offset);
+      if (req.nr_segments > 1) {
+        printf("FUCK");
+        exit(1);
+      }
+      if (req.nr_segments)
+        buf = xc_gnttab_map_grant_ref(xcg_handle,
+                                      backend->domid,
+                                      req.u.gref[0],
+                                      PROT_READ | PROT_WRITE);
+      if (buf)
+        responded = superhid_setup(&setup, buf + req.offset);
+      else
+        responded = superhid_setup(&setup, NULL);
+      rsp.id            = req.id;
+      rsp.actual_length = responded;
+      rsp.data          = 0;
+      if (responded >= 0)
+        rsp.status        = USBIF_RSP_OKAY;
+      else
+        rsp.status        = USBIF_RSP_USB_INVALID;
+      if (buf != NULL)
+        xc_gnttab_munmap(xcg_handle, buf, 1);
     }
-    if (responded != 0) {
+
+    if (req.type != 3) {
       memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
       back_ring.rsp_prod_pvt++;
       RING_PUSH_RESPONSES(&back_ring);
@@ -842,6 +1013,11 @@ int main(int argc, char **argv)
   ui.usb_device = 1;
   ui.usb_vendor = 0x03eb;
   ui.usb_product = 0x211c;
+
+  /* DYNAMIC inits */
+  hid_desc.wAddDescriptorLength = superhid_desc.report_desc_length;
+  endpoint_in_desc.wMaxPacketSize = superhid_desc.report_length;
+  endpoint_out_desc.wMaxPacketSize = superhid_desc.report_length;
 
   /* Do stuffs */
   if (backend_init(0))
