@@ -164,6 +164,9 @@ int back_ring_ready = 0;
 struct superhid_backend *backend = NULL;
 int evtfd = -1;
 void *priv = NULL;
+int pending = -1;
+int pendingref = -1;
+int pendingoffset = -1;
 
 static void*
 xmalloc(size_t size)
@@ -830,16 +833,46 @@ void consume_requests(void)
       if (responded >= 0)
         rsp.status        = USBIF_RSP_OKAY;
       else
-        rsp.status        = USBIF_RSP_USB_INVALID;
+        rsp.status        = USBIF_RSP_EOPNOTSUPP;
       if (buf != NULL)
         xc_gnttab_munmap(xcg_handle, buf, 1);
     }
 
+    if (req.type == 8) {
+      uint64_t tocancel = *((uint64_t*)&req.u.data[0]);
+      if (tocancel != pending) {
+        rsp.id = req.id;
+        rsp.actual_length = 0;
+        rsp.data          = 0;
+        rsp.status        = USBIF_RSP_ERROR;
+        printf("failing to cancel %d\n", tocancel);
+      } else {
+        rsp.id            = tocancel;
+        rsp.actual_length = 0;
+        rsp.data          = 0;
+        rsp.status        = USBIF_RSP_USB_CANCELED;
+        pending = -1;
+        pendingref = -1;
+        memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
+        back_ring.rsp_prod_pvt++;
+        RING_PUSH_RESPONSES(&back_ring);
+        backend_evtchn_notify(backend->backend, backend->device->devid);
+        printf("cancelled %d\n", tocancel);
+        rsp.id = req.id;
+        rsp.actual_length = 0;
+        rsp.data          = 0;
+        rsp.status        = USBIF_RSP_OKAY;
+      }
+    }
     if (req.type != 3) {
       memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
       back_ring.rsp_prod_pvt++;
       RING_PUSH_RESPONSES(&back_ring);
       backend_evtchn_notify(backend->backend, backend->device->devid);
+    } else {
+      pending = req.id;
+      pendingref = req.u.gref[0];
+      pendingoffset = req.offset;
     }
     back_ring.req_cons++;
     printf("***********************\n");
@@ -961,6 +994,61 @@ static struct xen_backend_ops superhid_backend_ops = {
   superhid_free
 };
 
+void send_stuffs(int fd)
+{
+  char buf[13];
+  int n;
+  int i;
+  usbif_response_t rsp;
+  char *data, *target;
+
+  n = read(fd, buf, 13);
+  if (n < 12) {
+    printf("just got %d: %s\n", n, buf);
+    return;
+  }
+
+  if (!strncmp(buf, "000000000000", 12)) {
+    usleep(10000);
+    return;
+  }
+
+  rsp.id            = pending;
+  rsp.actual_length = 6;
+  rsp.data          = 0;
+  rsp.status        = USBIF_RSP_OKAY;
+
+  target = xc_gnttab_map_grant_ref(xcg_handle,
+                                   backend->domid,
+                                   pendingref,
+                                   PROT_READ | PROT_WRITE);
+  data = target + pendingoffset;
+  for (i = 0; i < 12; i += 2) {
+    if (buf[i] >= '0' && buf[i] <= '9')
+      data[i/2] = (buf[i] - '0') << 4;
+    else if (buf[i] >= 'A' && buf[i] <= 'F')
+      data[i/2] = (buf[i] - 'A' + 10) << 4;
+    else
+      return;
+    if (buf[i+1] >= '0' && buf[i+1] <= '9')
+      data[i/2] |= buf[i+1] - '0';
+    else if (buf[i+1] >= 'A' && buf[i+1] <= 'F')
+      data[i/2] |= buf[i+1] - 'A' + 10;
+    else
+      return;
+    printf("%02X\n", data[i/2]);
+  }
+  xc_gnttab_munmap(xcg_handle, target, 1);
+  memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
+  back_ring.rsp_prod_pvt++;
+  RING_PUSH_RESPONSES(&back_ring);
+  backend_evtchn_notify(backend->backend, backend->device->devid);
+
+  pending = -1;
+  pendingref = -1;
+  printf("done\n");
+}
+
 int main(int argc, char **argv)
 {
   dominfo_t di;
@@ -1041,10 +1129,12 @@ int main(int argc, char **argv)
 
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
+    FD_SET(STDIN_FILENO, &fds);
+    fdmax = fd;
     if (evtfd != -1)
     {
       FD_SET(evtfd, &fds);
-      if (evtfd > fd)
+      if (evtfd > fdmax)
         fdmax = evtfd;
     }
 
@@ -1053,6 +1143,12 @@ int main(int argc, char **argv)
     if (FD_ISSET(fd, &fds)) {
       /* printf("fd fired\n"); */
       backend_xenstore_handler(NULL);
+    }
+    if (FD_ISSET(STDIN_FILENO, &fds)) {
+      if (pending != -1 && pendingref != -1) {
+        printf("drawing!\n");
+        send_stuffs(STDIN_FILENO);
+      }
     }
     if (evtfd != -1 && FD_ISSET(evtfd, &fds)) {
       /* printf("evtfd fired\n"); */
