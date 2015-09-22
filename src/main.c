@@ -68,6 +68,7 @@
 #include <linux/hid.h>
 #include <xen/grant_table.h>
 
+#include "superplugin.h"
 #include "usbif.h"
 
 /**
@@ -164,9 +165,11 @@ int back_ring_ready = 0;
 struct superhid_backend *backend = NULL;
 int evtfd = -1;
 void *priv = NULL;
-int pending = -1;
-int pendingref = -1;
-int pendingoffset = -1;
+int pendings[32];
+int pendingrefs[32];
+int pendingoffsets[32];
+int pendinghead = 0;
+int pendingtail = 0;
 
 static void*
 xmalloc(size_t size)
@@ -448,11 +451,11 @@ struct hid_report_desc superhid_desc = {
   .subclass= 0, /* No subclass */
   .protocol= 0,
   .report_length = 8,
-  .report_desc_length = 144,
+  /* .report_desc_length = 144, */
   /* Length without the mouse: */
-  /* .report_desc_length= 84, */
+  .report_desc_length= 84,
   .report_desc= {
-    MOUSE,
+    /* MOUSE, */
     0x05, 0x0D,         /*  Usage Page (Digitizer),             */
     0x09, 0x04,         /*  Usage (Touchscreen),                */
     0xA1, 0x01,         /*  Collection (Application),           */
@@ -768,26 +771,20 @@ void consume_requests(void)
     return;
   }
 
-  /* for (int i = 0; i < 42; ++i) */
-  /*   printf("%02X ", ((char *)dev->page)[i]); */
-  /* printf("\n"); */
-
-  /* while (!RING_HAS_UNCONSUMED_REQUESTS(&back_ring)) */
-  /*   ; */
   while (RING_HAS_UNCONSUMED_REQUESTS(&back_ring))
   {
     memcpy(&req, RING_GET_REQUEST(&back_ring, back_ring.req_cons), sizeof(req));
-    printf("***** GOT REQUEST *****\n", req.id, req.type);
-    printf("id=%d\n", req.id);
-    printf("setup=%X\n", req.setup);
-    printf("type=%X\n", req.type);
-    printf("endpoint=%d\n", req.endpoint);
-    printf("offset=%X\n", req.offset);
-    printf("length=%d\n", req.length);
-    printf("nr_segments=%d\n", req.nr_segments);
-    printf("flags=%X\n", req.flags);
-    printf("nr_packets=%d\n", req.nr_packets);
-    printf("startframe=%d\n", req.startframe);
+    /* printf("***** GOT REQUEST *****\n", req.id, req.type); */
+    /* printf("id=%d\n", req.id); */
+    /* printf("setup=%X\n", req.setup); */
+    /* printf("type=%X\n", req.type); */
+    /* printf("endpoint=%d\n", req.endpoint); */
+    /* printf("offset=%X\n", req.offset); */
+    /* printf("length=%d\n", req.length); */
+    /* printf("nr_segments=%d\n", req.nr_segments); */
+    /* printf("flags=%X\n", req.flags); */
+    /* printf("nr_packets=%d\n", req.nr_packets); */
+    /* printf("startframe=%d\n", req.startframe); */
     responded = -1;
     if (req.type == USBIF_T_GET_SPEED) {
       rsp.id            = req.id;
@@ -808,12 +805,12 @@ void consume_requests(void)
       void *buf = NULL;
 
       memcpy(&setup, &req.setup, sizeof(struct usb_ctrlrequest));
-      printf("SETUP.bRequestType=%X\n", setup.bRequestType);
-      printf("SETUP.bRequest=%X\n", setup.bRequest);
-      printf("SETUP.wValue=%X\n", setup.wValue);
-      printf("SETUP.wIndex=%X\n", setup.wIndex);
-      printf("SETUP.wLength=%d\n", setup.wLength);
-      printf("SETUP ");
+      /* printf("SETUP.bRequestType=%X\n", setup.bRequestType); */
+      /* printf("SETUP.bRequest=%X\n", setup.bRequest); */
+      /* printf("SETUP.wValue=%X\n", setup.wValue); */
+      /* printf("SETUP.wIndex=%X\n", setup.wIndex); */
+      /* printf("SETUP.wLength=%d\n", setup.wLength); */
+      /* printf("SETUP "); */
       if (req.nr_segments > 1) {
         printf("FUCK");
         exit(1);
@@ -840,7 +837,11 @@ void consume_requests(void)
 
     if (req.type == 8) {
       uint64_t tocancel = *((uint64_t*)&req.u.data[0]);
-      if (tocancel != pending) {
+      int i;
+      for (i = pendinghead; i != pendingtail; i = (i + 1) % 32)
+        if (pendings[i] == tocancel)
+          break;
+      if (tocancel != pendings[i]) {
         rsp.id = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
@@ -851,8 +852,9 @@ void consume_requests(void)
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_USB_CANCELED;
-        pending = -1;
-        pendingref = -1;
+        pendings[i] = -1;
+        pendingrefs[i] = -1;
+        pendingoffsets[i] = -1;
         memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
         back_ring.rsp_prod_pvt++;
         RING_PUSH_RESPONSES(&back_ring);
@@ -870,12 +872,14 @@ void consume_requests(void)
       RING_PUSH_RESPONSES(&back_ring);
       backend_evtchn_notify(backend->backend, backend->device->devid);
     } else {
-      pending = req.id;
-      pendingref = req.u.gref[0];
-      pendingoffset = req.offset;
+      printf("pendings[%d]=%d\n", pendingtail, req.id);
+      pendings[pendingtail] = req.id;
+      pendingrefs[pendingtail] = req.u.gref[0];
+      pendingoffsets[pendingtail] = req.offset;
+      pendingtail = (pendingtail + 1) % 32;
     }
     back_ring.req_cons++;
-    printf("***********************\n");
+    /* printf("***********************\n"); */
   }
 }
 
@@ -994,6 +998,46 @@ static struct xen_backend_ops superhid_backend_ops = {
   superhid_free
 };
 
+void send_report(int fd, struct superhid_report *report)
+{
+  usbif_response_t rsp;
+  char *data, *target;
+
+  while (pendings[pendinghead] == -1 && pendinghead != pendingtail)
+    pendinghead = (pendinghead + 1) % 32;
+
+  if (pendinghead == pendingtail)
+    return;
+
+  rsp.id            = pendings[pendinghead];
+  rsp.actual_length = 6;
+  rsp.data          = 0;
+  rsp.status        = USBIF_RSP_OKAY;
+
+  target = xc_gnttab_map_grant_ref(xcg_handle,
+                                   backend->domid,
+                                   pendingrefs[pendinghead],
+                                   PROT_READ | PROT_WRITE);
+  data = target + pendingoffsets[pendinghead];
+  data[0] = report->report_id;
+  data[1] = report->misc;
+  data[2] = report->x & 0xFF;
+  data[3] = (report->x >> 8);
+  data[4] = report->y & 0xFF;
+  data[5] = (report->y >> 8);
+
+  printf("sending %02X %02X %02X %02X %02X %02X to %d\n",
+         data[0], data[1], data[2], data[3], data[4], data[5], pendings[pendinghead]);
+
+  xc_gnttab_munmap(xcg_handle, target, 1);
+  memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
+  back_ring.rsp_prod_pvt++;
+  RING_PUSH_RESPONSES(&back_ring);
+  backend_evtchn_notify(backend->backend, backend->device->devid);
+
+  pendinghead = (pendinghead + 1) % 32;
+}
+
 void send_stuffs(int fd)
 {
   char buf[13];
@@ -1001,6 +1045,12 @@ void send_stuffs(int fd)
   int i;
   usbif_response_t rsp;
   char *data, *target;
+
+  while (pendings[pendinghead] == -1 && pendinghead != pendingtail)
+    pendinghead = (pendinghead + 1) % 32;
+
+  if (pendinghead == pendingtail)
+    return;
 
   n = read(fd, buf, 13);
   if (n < 12) {
@@ -1013,16 +1063,16 @@ void send_stuffs(int fd)
     return;
   }
 
-  rsp.id            = pending;
+  rsp.id            = pendings[pendinghead];
   rsp.actual_length = 6;
   rsp.data          = 0;
   rsp.status        = USBIF_RSP_OKAY;
 
   target = xc_gnttab_map_grant_ref(xcg_handle,
                                    backend->domid,
-                                   pendingref,
+                                   pendingrefs[pendinghead],
                                    PROT_READ | PROT_WRITE);
-  data = target + pendingoffset;
+  data = target + pendingoffsets[pendinghead];
   for (i = 0; i < 12; i += 2) {
     if (buf[i] >= '0' && buf[i] <= '9')
       data[i/2] = (buf[i] - '0') << 4;
@@ -1044,9 +1094,7 @@ void send_stuffs(int fd)
   RING_PUSH_RESPONSES(&back_ring);
   backend_evtchn_notify(backend->backend, backend->device->devid);
 
-  pending = -1;
-  pendingref = -1;
-  printf("done\n");
+  pendinghead = (pendinghead + 1) % 32;
 }
 
 int main(int argc, char **argv)
@@ -1056,10 +1104,12 @@ int main(int argc, char **argv)
   int domid, ret;
   char path[256], token[256];
   char* res;
-  int ring, evtchn, fd;
+  int ring, evtchn, fd, superfd;
   xc_evtchn *ec;
   char *page;
   fd_set fds;
+  struct superhid_report report;
+  int remaining = 0;
 
   if (argc != 2)
     return 1;
@@ -1124,13 +1174,18 @@ int main(int argc, char **argv)
 
   xenstore_create_usb(&di, &ui);
 
+  superfd = superplugin_init(di.di_domid);
+
   do {
     int fdmax = fd;
 
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
-    FD_SET(STDIN_FILENO, &fds);
+    /* FD_SET(STDIN_FILENO, &fds); */
+    FD_SET(superfd, &fds);
     fdmax = fd;
+    if (superfd > fdmax)
+      fdmax = superfd;
     if (evtfd != -1)
     {
       FD_SET(evtfd, &fds);
@@ -1144,16 +1199,26 @@ int main(int argc, char **argv)
       /* printf("fd fired\n"); */
       backend_xenstore_handler(NULL);
     }
-    if (FD_ISSET(STDIN_FILENO, &fds)) {
-      if (pending != -1 && pendingref != -1) {
-        printf("drawing!\n");
-        send_stuffs(STDIN_FILENO);
-      }
-    }
+    /* if (FD_ISSET(STDIN_FILENO, &fds)) { */
+    /*   if (pending != -1 && pendingref != -1) { */
+    /*     printf("drawing!\n"); */
+    /*     send_stuffs(STDIN_FILENO); */
+    /*   } */
+    /* } */
     if (evtfd != -1 && FD_ISSET(evtfd, &fds)) {
       /* printf("evtfd fired\n"); */
       if (priv != NULL)
         backend_evtchn_handler(priv);
+    }
+    if (FD_ISSET(superfd, &fds) || remaining >= sizeof(report)) {
+      while (pendings[pendinghead] == -1 && pendinghead != pendingtail)
+        pendinghead = (pendinghead + 1) % 32;
+      if (pendinghead != pendingtail) {
+        report.report_id = 0;
+        remaining = superplugin_callback(superfd, &report);
+        if (report.report_id != 0)
+          send_report(superfd, &report);
+      }
     }
   } while (1);
   xc_evtchn_close(ec);

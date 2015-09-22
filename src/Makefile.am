@@ -25,7 +25,7 @@ INCLUDES = @DBUS_CFLAGS@ @DBUS_GLIB_CFLAGS@ @LIBXCDBUS_INC@ @LIBV4V_INC@ @LIBUSB
 
 sbin_PROGRAMS = superhid
 
-PROTO_SRCS = main.c
+PROTO_SRCS = main.c superplugin.c
 
 superhid_SOURCES = ${PROTO_SRCS}
 
