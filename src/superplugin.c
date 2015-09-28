@@ -70,7 +70,7 @@
  * 10 */
 #define MAX_FINGERS             10
 
-static struct event_record
+struct event_record
 {
   uint32_t magic;
   uint16_t itype;
@@ -78,7 +78,7 @@ static struct event_record
   uint32_t ivalue;
 } __attribute__ ((__packed__));
 
-static struct buffer_t
+struct buffer_t
 {
   char buffer[buffersize];
   unsigned int bytes_remaining;

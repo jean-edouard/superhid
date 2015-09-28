@@ -18,65 +18,72 @@
 
 #include "project.h"
 
+static void print_request(usbif_request_t *req)
+{
+  xd_log(LOG_DEBUG, "***** GOT REQUEST *****\n");
+  xd_log(LOG_DEBUG, "id=%d\n", req->id);
+  xd_log(LOG_DEBUG, "setup=%X\n", req->setup);
+  xd_log(LOG_DEBUG, "type=%X\n", req->type);
+  xd_log(LOG_DEBUG, "endpoint=%d\n", req->endpoint);
+  xd_log(LOG_DEBUG, "offset=%X\n", req->offset);
+  xd_log(LOG_DEBUG, "length=%d\n", req->length);
+  xd_log(LOG_DEBUG, "nr_segments=%d\n", req->nr_segments);
+  xd_log(LOG_DEBUG, "flags=%X\n", req->flags);
+  xd_log(LOG_DEBUG, "nr_packets=%d\n", req->nr_packets);
+  xd_log(LOG_DEBUG, "startframe=%d\n", req->startframe);
+}
+
+static void print_setup(struct usb_ctrlrequest *setup)
+{
+  xd_log(LOG_DEBUG, "SETUP.bRequestType=%X\n", setup->bRequestType);
+  xd_log(LOG_DEBUG, "SETUP.bRequest=%X\n", setup->bRequest);
+  xd_log(LOG_DEBUG, "SETUP.wValue=%X\n", setup->wValue);
+  xd_log(LOG_DEBUG, "SETUP.wIndex=%X\n", setup->wIndex);
+  xd_log(LOG_DEBUG, "SETUP.wLength=%d\n", setup->wLength);
+}
+
 void consume_requests(void)
 {
   RING_IDX rc, rp;
   usbif_request_t req;
   usbif_response_t rsp;
   int responded;
+  struct usb_ctrlrequest setup;
+  void *buf = NULL;
+  uint64_t tocancel;
+  int i;
 
   if (back_ring_ready != 1) {
-    printf("not ready to consume\n");
+    xd_log(LOG_ERR, "Backend not ready to consume");
     return;
   }
 
   while (RING_HAS_UNCONSUMED_REQUESTS(&back_ring))
   {
     memcpy(&req, RING_GET_REQUEST(&back_ring, back_ring.req_cons), sizeof(req));
-#ifdef DEBUG
-    printf("***** GOT REQUEST *****\n", req.id, req.type);
-    printf("id=%d\n", req.id);
-    printf("setup=%X\n", req.setup);
-    printf("type=%X\n", req.type);
-    printf("endpoint=%d\n", req.endpoint);
-    printf("offset=%X\n", req.offset);
-    printf("length=%d\n", req.length);
-    printf("nr_segments=%d\n", req.nr_segments);
-    printf("flags=%X\n", req.flags);
-    printf("nr_packets=%d\n", req.nr_packets);
-    printf("startframe=%d\n", req.startframe);
-#endif
+    print_request(&req);
     responded = -1;
-    if (req.type == USBIF_T_GET_SPEED) {
-      rsp.id            = req.id;
-      rsp.actual_length = 0;
-      rsp.data          = USBIF_S_HIGH;
-      rsp.status        = USBIF_RSP_OKAY;
-      responded = 0;
-    }
-    if (req.type == USBIF_T_RESET) {
-      rsp.id            = req.id;
-      rsp.actual_length = 0;
-      rsp.data          = 0;
-      rsp.status        = USBIF_RSP_OKAY;
-      responded = 0;
-    }
-    if (req.setup != 0) {
-      struct usb_ctrlrequest setup;
-      void *buf = NULL;
-
+    switch (req.type) {
+    case USBIF_T_CNTRL: /* Setup request. Ask superhid and reply. */
+      if (req.setup == 0) {
+        xd_log(LOG_ERR, "Control request with no setup value");
+        rsp.id = req.id;
+        rsp.actual_length = 0;
+        rsp.data          = 0;
+        rsp.status        = USBIF_RSP_ERROR;
+        superbackend_send(backend, &rsp);
+        break;
+      }
       memcpy(&setup, &req.setup, sizeof(struct usb_ctrlrequest));
-#ifdef DEBUG
-      printf("SETUP.bRequestType=%X\n", setup.bRequestType);
-      printf("SETUP.bRequest=%X\n", setup.bRequest);
-      printf("SETUP.wValue=%X\n", setup.wValue);
-      printf("SETUP.wIndex=%X\n", setup.wIndex);
-      printf("SETUP.wLength=%d\n", setup.wLength);
-      printf("SETUP ");
-#endif
+      print_setup(&setup);
       if (req.nr_segments > 1) {
         xd_log(LOG_ERR, "Multiple segments not supported yet");
-        exit(1);
+        rsp.id = req.id;
+        rsp.actual_length = 0;
+        rsp.data          = 0;
+        rsp.status        = USBIF_RSP_ERROR;
+        superbackend_send(backend, &rsp);
+        break;
       }
       if (req.nr_segments)
         buf = xc_gnttab_map_grant_ref(xcg_handle,
@@ -96,20 +103,41 @@ void consume_requests(void)
         rsp.status        = USBIF_RSP_EOPNOTSUPP;
       if (buf != NULL)
         xc_gnttab_munmap(xcg_handle, buf, 1);
-    }
-
-    if (req.type == 8) {
-      uint64_t tocancel = *((uint64_t*)&req.u.data[0]);
-      int i;
+      break;
+    case USBIF_T_INT: /* Interrupt request. Pend it. */
+      printf("pendings[%d]=%d\n", pendingtail, req.id);
+      pendings[pendingtail] = req.id;
+      pendingrefs[pendingtail] = req.u.gref[0];
+      pendingoffsets[pendingtail] = req.offset;
+      pendingtail = (pendingtail + 1) % 32;
+      break;
+    case USBIF_T_RESET: /* (internal) Reset request, reply and do nothing */
+      rsp.id            = req.id;
+      rsp.actual_length = 0;
+      rsp.data          = 0;
+      rsp.status        = USBIF_RSP_OKAY;
+      superbackend_send(backend, &rsp);
+      break;
+    case USBIF_T_GET_SPEED: /* (internal) Speed request, say HIGH (USB2) */
+      rsp.id            = req.id;
+      rsp.actual_length = 0;
+      rsp.data          = USBIF_S_HIGH;
+      rsp.status        = USBIF_RSP_OKAY;
+      superbackend_send(backend, &rsp);
+      break;
+    case USBIF_T_CANCEL: /* (internal) Cancel request. Cancel the
+                          * requested pending request and reply. */
+      tocancel = *((uint64_t*)&req.u.data[0]);
       for (i = pendinghead; i != pendingtail; i = (i + 1) % 32)
         if (pendings[i] == tocancel)
           break;
       if (tocancel != pendings[i]) {
-        rsp.id = req.id;
+        rsp.id            = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
-        printf("failing to cancel %d\n", tocancel);
+        xd_log(LOG_DEBUG, "Failing to cancel %d", tocancel);
+        superbackend_send(backend, &rsp);
       } else {
         rsp.id            = tocancel;
         rsp.actual_length = 0;
@@ -119,26 +147,19 @@ void consume_requests(void)
         pendingrefs[i] = -1;
         pendingoffsets[i] = -1;
         superbackend_send(backend, &rsp);
-        printf("cancelled %d\n", tocancel);
+        xd_log(LOG_DEBUG, "Cancelled %d", tocancel);
         rsp.id = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_OKAY;
+        superbackend_send(backend, &rsp);
       }
+      break;
     }
-    if (req.type != 3) {
-      superbackend_send(backend, &rsp);
-    } else {
-      printf("pendings[%d]=%d\n", pendingtail, req.id);
-      pendings[pendingtail] = req.id;
-      pendingrefs[pendingtail] = req.u.gref[0];
-      pendingoffsets[pendingtail] = req.offset;
-      pendingtail = (pendingtail + 1) % 32;
-    }
+
     back_ring.req_cons++;
-#ifdef DEBUG
-    printf("***********************\n");
-#endif
+
+    xd_log(LOG_DEBUG, "***********************\n");
   }
 }
 
