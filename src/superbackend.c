@@ -42,7 +42,7 @@ static void print_setup(struct usb_ctrlrequest *setup)
   xd_log(LOG_DEBUG, "SETUP.wLength=%d\n", setup->wLength);
 }
 
-void consume_requests(void)
+void consume_requests(struct superhid_device *dev)
 {
   RING_IDX rc, rp;
   usbif_request_t req;
@@ -53,14 +53,14 @@ void consume_requests(void)
   uint64_t tocancel;
   int i;
 
-  if (back_ring_ready != 1) {
+  if (dev->back_ring_ready != 1) {
     xd_log(LOG_ERR, "Backend not ready to consume");
     return;
   }
 
-  while (RING_HAS_UNCONSUMED_REQUESTS(&back_ring))
+  while (RING_HAS_UNCONSUMED_REQUESTS(&dev->back_ring))
   {
-    memcpy(&req, RING_GET_REQUEST(&back_ring, back_ring.req_cons), sizeof(req));
+    memcpy(&req, RING_GET_REQUEST(&dev->back_ring, dev->back_ring.req_cons), sizeof(req));
     print_request(&req);
     responded = -1;
     switch (req.type) {
@@ -71,7 +71,7 @@ void consume_requests(void)
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
-        superbackend_send(backend, &rsp);
+        superbackend_send(dev, &rsp);
         break;
       }
       memcpy(&setup, &req.setup, sizeof(struct usb_ctrlrequest));
@@ -82,12 +82,12 @@ void consume_requests(void)
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
-        superbackend_send(backend, &rsp);
+        superbackend_send(dev, &rsp);
         break;
       }
       if (req.nr_segments)
         buf = xc_gnttab_map_grant_ref(xcg_handle,
-                                      backend->domid,
+                                      dev->di.di_domid,
                                       req.u.gref[0],
                                       PROT_READ | PROT_WRITE);
       if (buf)
@@ -105,59 +105,59 @@ void consume_requests(void)
         xc_gnttab_munmap(xcg_handle, buf, 1);
       break;
     case USBIF_T_INT: /* Interrupt request. Pend it. */
-      printf("pendings[%d]=%d\n", pendingtail, req.id);
-      pendings[pendingtail] = req.id;
-      pendingrefs[pendingtail] = req.u.gref[0];
-      pendingoffsets[pendingtail] = req.offset;
-      pendingtail = (pendingtail + 1) % 32;
+      printf("pendings[%d]=%d\n", dev->pendingtail, req.id);
+      dev->pendings[dev->pendingtail] = req.id;
+      dev->pendingrefs[dev->pendingtail] = req.u.gref[0];
+      dev->pendingoffsets[dev->pendingtail] = req.offset;
+      dev->pendingtail = (dev->pendingtail + 1) % 32;
       break;
     case USBIF_T_RESET: /* (internal) Reset request, reply and do nothing */
       rsp.id            = req.id;
       rsp.actual_length = 0;
       rsp.data          = 0;
       rsp.status        = USBIF_RSP_OKAY;
-      superbackend_send(backend, &rsp);
+      superbackend_send(dev, &rsp);
       break;
     case USBIF_T_GET_SPEED: /* (internal) Speed request, say HIGH (USB2) */
       rsp.id            = req.id;
       rsp.actual_length = 0;
       rsp.data          = USBIF_S_HIGH;
       rsp.status        = USBIF_RSP_OKAY;
-      superbackend_send(backend, &rsp);
+      superbackend_send(dev, &rsp);
       break;
     case USBIF_T_CANCEL: /* (internal) Cancel request. Cancel the
                           * requested pending request and reply. */
       tocancel = *((uint64_t*)&req.u.data[0]);
-      for (i = pendinghead; i != pendingtail; i = (i + 1) % 32)
-        if (pendings[i] == tocancel)
+      for (i = dev->pendinghead; i != dev->pendingtail; i = (i + 1) % 32)
+        if (dev->pendings[i] == tocancel)
           break;
-      if (tocancel != pendings[i]) {
+      if (tocancel != dev->pendings[i]) {
         rsp.id            = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
         xd_log(LOG_DEBUG, "Failing to cancel %d", tocancel);
-        superbackend_send(backend, &rsp);
+        superbackend_send(dev, &rsp);
       } else {
         rsp.id            = tocancel;
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_USB_CANCELED;
-        pendings[i] = -1;
-        pendingrefs[i] = -1;
-        pendingoffsets[i] = -1;
-        superbackend_send(backend, &rsp);
+        dev->pendings[i] = -1;
+        dev->pendingrefs[i] = -1;
+        dev->pendingoffsets[i] = -1;
+        superbackend_send(dev, &rsp);
         xd_log(LOG_DEBUG, "Cancelled %d", tocancel);
         rsp.id = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_OKAY;
-        superbackend_send(backend, &rsp);
+        superbackend_send(dev, &rsp);
       }
       break;
     }
 
-    back_ring.req_cons++;
+    dev->back_ring.req_cons++;
 
     xd_log(LOG_DEBUG, "***********************\n");
   }
@@ -166,16 +166,17 @@ void consume_requests(void)
 static xen_device_t
 superback_alloc(xen_backend_t backend, int devid, void *priv)
 {
-  struct superhid_backend *back = priv;
-  struct superhid_device *dev = back->device;
+  struct superhid_device *dev;
+  struct superhid_backend *superback = priv;
 
-  /* printf("alloc %p %d %p\n", backend, devid, priv); */
   dev = malloc(sizeof(*dev));
   memset(dev, 0, sizeof(*dev));
-
   dev->devid = devid;
   dev->backend = backend;
-  back->device = dev;
+  dev->evtfd = -1;
+  dev->superback = superback;
+
+  superback->devices[devid] = dev;
 
   return dev;
 }
@@ -201,9 +202,9 @@ superback_connect(xen_device_t xendev)
 
   /* printf("connect %p\n", xendev); */
 
-  evtfd = backend_bind_evtchn(dev->backend, dev->devid);
-  priv = backend_evtchn_priv(dev->backend, dev->devid);
-  if (evtfd < 0) {
+  dev->evtfd = backend_bind_evtchn(dev->backend, dev->devid);
+  dev->priv = backend_evtchn_priv(dev->backend, dev->devid);
+  if (dev->evtfd < 0) {
     printf("failed to bind evtchn\n");
     return -1;
   }
@@ -214,8 +215,8 @@ superback_connect(xen_device_t xendev)
     return -1;
   }
 
-  BACK_RING_INIT(&back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
-  back_ring_ready = 1;
+  BACK_RING_INIT(&dev->back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
+  dev->back_ring_ready = 1;
 
   return 0;
 }
@@ -233,15 +234,15 @@ superback_disconnect(xen_device_t xendev)
 }
 
 static void superback_backend_changed(xen_device_t xendev,
-                                     const char *node,
-                                     const char *val)
+                                      const char *node,
+                                      const char *val)
 {
   /* printf("backend changed: %s=%s\n", node, val); */
 }
 
 static void superback_frontend_changed(xen_device_t xendev,
-                                      const char *node,
-                                      const char *val)
+                                       const char *node,
+                                       const char *val)
 {
   /* printf("frontend changed: %s=%s\n", node, val); */
 }
@@ -252,7 +253,7 @@ superback_event(xen_device_t xendev)
   struct superhid_device *dev = xendev;
 
   /* printf("event %p\n", xendev); */
-  consume_requests();
+  consume_requests(dev);
 }
 
 static void
@@ -262,7 +263,7 @@ superback_free(xen_device_t xendev)
 
   /* printf("free %p\n", xendev); */
   superback_disconnect(xendev);
-
+  dev->superback->devices[dev->devid] = NULL;
   free(dev);
 }
 
@@ -279,29 +280,32 @@ static struct xen_backend_ops superback_ops = {
 
 int superbackend_init(void)
 {
-  if (backend_init(0)) {
+  if (backend_init(SUPERHID_DOMID)) {
     xd_log(LOG_ERR, "Failed to initialize libxenbackend");
     return -1;
   }
-  backend = malloc(sizeof(*backend));
-  backend->domid = di.di_domid;
-  backend->device = NULL;
-  backend->backend = backend_register(BACKEND_NAME, di.di_domid, &superback_ops, backend);
-  if (!backend->backend)
-  {
-    xd_log(LOG_ERR, "Failed to register as a backend");
-    free(backend);
-    return -1;
-  }
-  fd = backend_xenstore_fd();
 
-  return fd;
+  return backend_xenstore_fd();
 }
 
-void superbackend_send(struct superhid_backend *backend, usbif_response_t *rsp)
+xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback)
 {
-  memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), rsp, sizeof(*rsp));
-  back_ring.rsp_prod_pvt++;
-  RING_PUSH_RESPONSES(&back_ring);
-  backend_evtchn_notify(backend->backend, backend->device->devid);
+  xen_backend_t backend;
+
+  backend = backend_register(SUPERHID_NAME, di.di_domid, &superback_ops, superback);
+  if (!backend)
+  {
+    xd_log(LOG_ERR, "Failed to register as a backend for domid %d", di.di_domid);
+    return NULL;
+  }
+
+  return backend;
+}
+
+void superbackend_send(struct superhid_device *device, usbif_response_t *rsp)
+{
+  memcpy(RING_GET_RESPONSE(&device->back_ring, device->back_ring.rsp_prod_pvt), rsp, sizeof(*rsp));
+  device->back_ring.rsp_prod_pvt++;
+  RING_PUSH_RESPONSES(&device->back_ring);
+  backend_evtchn_notify(device->backend, device->devid);
 }

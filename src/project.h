@@ -76,26 +76,15 @@
 
 /* #define DEBUG */
 
-#define BACKEND_NAME "vusb"
+#define SUPERHID_NAME           "vusb"
+#define SUPERHID_DOMID          0
+/* The following is from libxenbackend. It should be exported and bigger */
+#define BACKEND_DEVICE_MAX     16
 
 /**
  * The (stupid) logging macro
  */
 #define xd_log(I, ...) do { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } while (0)
-
-struct superhid_device
-{
-  xen_backend_t backend;
-  int devid;
-  void *page;
-};
-
-struct superhid_backend
-{
-  xen_backend_t backend;
-  int domid;
-  struct superhid_device *device;
-};
 
 typedef struct dominfo
 {
@@ -103,6 +92,29 @@ typedef struct dominfo
   char *di_name;
   char *di_dompath;
 } dominfo_t;
+
+struct superhid_device
+{
+  unsigned char devid;
+  xen_backend_t backend;
+  struct superhid_backend *superback;
+  void *page;
+  usbif_back_ring_t back_ring;
+  unsigned int back_ring_ready:1;
+  dominfo_t di;
+  int evtfd;
+  void *priv;
+  unsigned char pendings[32]; /* 0 <= slot <= 31 */
+  unsigned int pendingrefs[32];
+  unsigned int pendingoffsets[32];
+  char pendinghead;
+  char pendingtail;
+};
+
+struct superhid_backend
+{
+  struct superhid_device *devices[BACKEND_DEVICE_MAX];
+};
 
 typedef struct usbinfo
 {
@@ -148,19 +160,8 @@ struct feature_report {
 #define REPORT_ID_CONFIG        0x11
 #define REPORT_ID_INVALID       0xff
 
-usbif_back_ring_t back_ring;
-int back_ring_ready;
-int evtfd;
-int fd;
-dominfo_t di;
-void *priv;
-int pendings[32];
-int pendingrefs[32];
-int pendingoffsets[32];
-int pendinghead;
-int pendingtail;
 static xc_gnttab *xcg_handle;
-struct superhid_backend *backend;
+/* struct superhid_device devices[SUPERHID_DEVICE_MAX]; */
 
 void superhid_init(void);
 int superhid_setup(struct usb_ctrlrequest *setup, void *buf);
@@ -169,6 +170,7 @@ int superxenstore_get_dominfo(int domid, dominfo_t *di);
 int superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
 void superxenstore_close(void);
 int superbackend_init(void);
-void superbackend_send(struct superhid_backend *backend, usbif_response_t *rsp);
+xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
+void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
 
 #endif 	    /* !PROJECT_H_ */

@@ -18,27 +18,27 @@
 
 #include "project.h"
 
-void send_report(int fd, struct superhid_report *report)
+void send_report(int fd, struct superhid_report *report, struct superhid_device *dev)
 {
   usbif_response_t rsp;
   char *data, *target;
 
-  while (pendings[pendinghead] == -1 && pendinghead != pendingtail)
-    pendinghead = (pendinghead + 1) % 32;
+  while (dev->pendings[dev->pendinghead] == -1 && dev->pendinghead != dev->pendingtail)
+    dev->pendinghead = (dev->pendinghead + 1) % 32;
 
-  if (pendinghead == pendingtail)
+  if (dev->pendinghead == dev->pendingtail)
     return;
 
-  rsp.id            = pendings[pendinghead];
+  rsp.id            = dev->pendings[dev->pendinghead];
   rsp.actual_length = 6;
   rsp.data          = 0;
   rsp.status        = USBIF_RSP_OKAY;
 
   target = xc_gnttab_map_grant_ref(xcg_handle,
-                                   backend->domid,
-                                   pendingrefs[pendinghead],
+                                   dev->di.di_domid,
+                                   dev->pendingrefs[dev->pendinghead],
                                    PROT_READ | PROT_WRITE);
-  data = target + pendingoffsets[pendinghead];
+  data = target + dev->pendingoffsets[dev->pendinghead];
   data[0] = report->report_id;
   data[1] = report->misc;
   data[2] = report->x & 0xFF;
@@ -47,76 +47,87 @@ void send_report(int fd, struct superhid_report *report)
   data[5] = (report->y >> 8);
 
   printf("sending %02X %02X %02X %02X %02X %02X to %d\n",
-         data[0], data[1], data[2], data[3], data[4], data[5], pendings[pendinghead]);
+         data[0], data[1], data[2], data[3], data[4], data[5], dev->pendings[dev->pendinghead]);
 
   xc_gnttab_munmap(xcg_handle, target, 1);
-  superbackend_send(backend, &rsp);
+  superbackend_send(dev, &rsp);
 
-  pendinghead = (pendinghead + 1) % 32;
+  dev->pendinghead = (dev->pendinghead + 1) % 32;
 }
 
-void send_stuffs(int fd)
+void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
 {
-  char buf[13];
-  int n;
   int i;
-  usbif_response_t rsp;
-  char *data, *target;
 
-  while (pendings[pendinghead] == -1 && pendinghead != pendingtail)
-    pendinghead = (pendinghead + 1) % 32;
-
-  if (pendinghead == pendingtail)
-    return;
-
-  n = read(fd, buf, 13);
-  if (n < 12) {
-    printf("just got %d: %s\n", n, buf);
-    return;
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
+    if (superback->devices[i] != NULL)
+      send_report(fd, report, superback->devices[i]);
   }
-
-  if (!strncmp(buf, "000000000000", 12)) {
-    usleep(10000);
-    return;
-  }
-
-  rsp.id            = pendings[pendinghead];
-  rsp.actual_length = 6;
-  rsp.data          = 0;
-  rsp.status        = USBIF_RSP_OKAY;
-
-  target = xc_gnttab_map_grant_ref(xcg_handle,
-                                   backend->domid,
-                                   pendingrefs[pendinghead],
-                                   PROT_READ | PROT_WRITE);
-  data = target + pendingoffsets[pendinghead];
-  for (i = 0; i < 12; i += 2) {
-    if (buf[i] >= '0' && buf[i] <= '9')
-      data[i/2] = (buf[i] - '0') << 4;
-    else if (buf[i] >= 'A' && buf[i] <= 'F')
-      data[i/2] = (buf[i] - 'A' + 10) << 4;
-    else
-      return;
-    if (buf[i+1] >= '0' && buf[i+1] <= '9')
-      data[i/2] |= buf[i+1] - '0';
-    else if (buf[i+1] >= 'A' && buf[i+1] <= 'F')
-      data[i/2] |= buf[i+1] - 'A' + 10;
-    else
-      return;
-    printf("%02X\n", data[i/2]);
-  }
-  xc_gnttab_munmap(xcg_handle, target, 1);
-  memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp));
-  back_ring.rsp_prod_pvt++;
-  RING_PUSH_RESPONSES(&back_ring);
-  backend_evtchn_notify(backend->backend, backend->device->devid);
-
-  pendinghead = (pendinghead + 1) % 32;
 }
+
+/* void send_stuffs(int fd) */
+/* { */
+/*   char buf[13]; */
+/*   int n; */
+/*   int i; */
+/*   usbif_response_t rsp; */
+/*   char *data, *target; */
+
+/*   while (pendings[pendinghead] == -1 && pendinghead != pendingtail) */
+/*     pendinghead = (pendinghead + 1) % 32; */
+
+/*   if (pendinghead == pendingtail) */
+/*     return; */
+
+/*   n = read(fd, buf, 13); */
+/*   if (n < 12) { */
+/*     printf("just got %d: %s\n", n, buf); */
+/*     return; */
+/*   } */
+
+/*   if (!strncmp(buf, "000000000000", 12)) { */
+/*     usleep(10000); */
+/*     return; */
+/*   } */
+
+/*   rsp.id            = pendings[pendinghead]; */
+/*   rsp.actual_length = 6; */
+/*   rsp.data          = 0; */
+/*   rsp.status        = USBIF_RSP_OKAY; */
+
+/*   target = xc_gnttab_map_grant_ref(xcg_handle, */
+/*                                    backend->domid, */
+/*                                    pendingrefs[pendinghead], */
+/*                                    PROT_READ | PROT_WRITE); */
+/*   data = target + pendingoffsets[pendinghead]; */
+/*   for (i = 0; i < 12; i += 2) { */
+/*     if (buf[i] >= '0' && buf[i] <= '9') */
+/*       data[i/2] = (buf[i] - '0') << 4; */
+/*     else if (buf[i] >= 'A' && buf[i] <= 'F') */
+/*       data[i/2] = (buf[i] - 'A' + 10) << 4; */
+/*     else */
+/*       return; */
+/*     if (buf[i+1] >= '0' && buf[i+1] <= '9') */
+/*       data[i/2] |= buf[i+1] - '0'; */
+/*     else if (buf[i+1] >= 'A' && buf[i+1] <= 'F') */
+/*       data[i/2] |= buf[i+1] - 'A' + 10; */
+/*     else */
+/*       return; */
+/*     printf("%02X\n", data[i/2]); */
+/*   } */
+/*   xc_gnttab_munmap(xcg_handle, target, 1); */
+/*   memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp)); */
+/*   back_ring.rsp_prod_pvt++; */
+/*   RING_PUSH_RESPONSES(&back_ring); */
+/*   backend_evtchn_notify(backend->backend, backend->device->devid); */
+
+/*   pendinghead = (pendinghead + 1) % 32; */
+/* } */
 
 int main(int argc, char **argv)
 {
   usbinfo_t ui;
+  dominfo_t di;
   int domid, ret;
   char path[256], token[256];
   char* res;
@@ -126,18 +137,20 @@ int main(int argc, char **argv)
   fd_set fds;
   struct superhid_report report;
   int remaining = 0;
+  int fd;
+  struct superhid_backend superback;
+  int i;
 
   if (argc != 2)
     return 1;
 
   /* Globals init */
-  evtfd = -1;
-  priv = NULL;
-  back_ring_ready = 0;
-  pendinghead = 0;
-  pendingtail = 0;
+  /* evtfd = -1; */
+  /* priv = NULL; */
+  /* back_ring_ready = 0; */
+  /* pendinghead = 0; */
+  /* pendingtail = 0; */
   xcg_handle = NULL;
-  backend = NULL;
 
   if (superxenstore_init() != 0)
     return 1;
@@ -165,9 +178,16 @@ int main(int argc, char **argv)
   ui.usb_vendor = 0x03eb;
   ui.usb_product = 0x211c;
 
+  /* Initialize the backend */
   fd = superbackend_init();
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
+    superback.devices[i] = NULL;
+  superbackend_add(di, &superback);
+
+  /* Create a new device on xenstore */
   superxenstore_create_usb(&di, &ui);
 
+  /* Grab input events for the domain */
   superfd = superplugin_init(di.di_domid);
 
   do {
@@ -180,12 +200,12 @@ int main(int argc, char **argv)
     fdmax = fd;
     if (superfd > fdmax)
       fdmax = superfd;
-    if (evtfd != -1)
-    {
-      FD_SET(evtfd, &fds);
-      if (evtfd > fdmax)
-        fdmax = evtfd;
-    }
+    /* if (evtfd != -1) */
+    /* { */
+    /*   FD_SET(evtfd, &fds); */
+    /*   if (evtfd > fdmax) */
+    /*     fdmax = evtfd; */
+    /* } */
 
     select(fdmax + 1, &fds, NULL, NULL, NULL);
 
@@ -199,20 +219,20 @@ int main(int argc, char **argv)
     /*     send_stuffs(STDIN_FILENO); */
     /*   } */
     /* } */
-    if (evtfd != -1 && FD_ISSET(evtfd, &fds)) {
-      /* printf("evtfd fired\n"); */
-      if (priv != NULL)
-        backend_evtchn_handler(priv);
-    }
+    /* if (evtfd != -1 && FD_ISSET(evtfd, &fds)) { */
+    /*   /\* printf("evtfd fired\n"); *\/ */
+    /*   if (priv != NULL) */
+    /*     backend_evtchn_handler(priv); */
+    /* } */
     if (FD_ISSET(superfd, &fds) || remaining >= sizeof(report)) {
-      while (pendings[pendinghead] == -1 && pendinghead != pendingtail)
-        pendinghead = (pendinghead + 1) % 32;
-      if (pendinghead != pendingtail) {
+      /* while (pendings[pendinghead] == -1 && pendinghead != pendingtail) */
+      /*   pendinghead = (pendinghead + 1) % 32; */
+      /* if (pendinghead != pendingtail) { */
         report.report_id = 0;
         remaining = superplugin_callback(superfd, &report);
         if (report.report_id != 0)
-          send_report(superfd, &report);
-      }
+          send_report_to_frontends(superfd, &report, &superback);
+      /* } */
     }
   } while (1);
   xc_evtchn_close(ec);
