@@ -260,6 +260,12 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
     goto stall;
     break;
 
+  case ((USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
+        | USB_REQ_GET_STATUS):
+    printf("DEVICE_GET_STATUS\n");
+    goto respond;
+    break;
+
   case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
         | USB_REQ_GET_DESCRIPTOR):
     printf("DEVICE GET DESCRIPTOR\n");

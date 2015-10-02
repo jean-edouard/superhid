@@ -244,19 +244,21 @@ static void process_event(struct event_record *r,
     printf("DEV_SET %d\n", dev_set);
   }
 
+/* TODO: Here we need to figure out if dev_set is the touchscreen or not. */
+/* Then we need to fix input_server and send the non-touch events back. */
+#if 0
   if (dev_set != 5) {
     /* process_relative_event() didn't do anything, and this is not a
      * touchscreen event (device 6).
      * At this point we'd want to just send that event to the guest
      * unmodified. Unfortunately, event sending seems to be broken... */
-#if 0
     if (itype == EV_KEY) {
       r->magic = MAGIC;
       send(b->s, r, sizeof(struct event_record), 0);
     }
-#endif
     return;
   }
+#endif
 
   process_absolute_event(itype, icode, ivalue, report);
 }

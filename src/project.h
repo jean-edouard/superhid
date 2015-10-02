@@ -58,6 +58,7 @@
 #include <sys/int_types.h>
 #endif
 
+#include <event.h>
 #include <sys/mman.h>
 #include <syslog.h>
 #include <fcntl.h>
@@ -74,7 +75,7 @@
 #include "superplugin.h"
 #include "usbif.h"
 
-/* #define DEBUG */
+#define DEBUG
 
 #define SUPERHID_NAME           "vusb"
 #define SUPERHID_DOMID          0
@@ -101,7 +102,6 @@ struct superhid_device
   void *page;
   usbif_back_ring_t back_ring;
   unsigned int back_ring_ready:1;
-  dominfo_t di;
   int evtfd;
   void *priv;
   unsigned char pendings[32]; /* 0 <= slot <= 31 */
@@ -109,11 +109,13 @@ struct superhid_device
   unsigned int pendingoffsets[32];
   char pendinghead;
   char pendingtail;
+  struct event event;
 };
 
 struct superhid_backend
 {
   struct superhid_device *devices[BACKEND_DEVICE_MAX];
+  dominfo_t di;
 };
 
 typedef struct usbinfo
@@ -160,8 +162,8 @@ struct feature_report {
 #define REPORT_ID_CONFIG        0x11
 #define REPORT_ID_INVALID       0xff
 
-static xc_gnttab *xcg_handle;
-/* struct superhid_device devices[SUPERHID_DEVICE_MAX]; */
+xc_gnttab *xcg_handle;
+struct superhid_backend superback;
 
 void superhid_init(void);
 int superhid_setup(struct usb_ctrlrequest *setup, void *buf);

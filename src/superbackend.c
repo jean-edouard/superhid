@@ -20,26 +20,26 @@
 
 static void print_request(usbif_request_t *req)
 {
-  xd_log(LOG_DEBUG, "***** GOT REQUEST *****\n");
-  xd_log(LOG_DEBUG, "id=%d\n", req->id);
-  xd_log(LOG_DEBUG, "setup=%X\n", req->setup);
-  xd_log(LOG_DEBUG, "type=%X\n", req->type);
-  xd_log(LOG_DEBUG, "endpoint=%d\n", req->endpoint);
-  xd_log(LOG_DEBUG, "offset=%X\n", req->offset);
-  xd_log(LOG_DEBUG, "length=%d\n", req->length);
-  xd_log(LOG_DEBUG, "nr_segments=%d\n", req->nr_segments);
-  xd_log(LOG_DEBUG, "flags=%X\n", req->flags);
-  xd_log(LOG_DEBUG, "nr_packets=%d\n", req->nr_packets);
-  xd_log(LOG_DEBUG, "startframe=%d\n", req->startframe);
+  xd_log(LOG_DEBUG, "***** GOT REQUEST *****");
+  xd_log(LOG_DEBUG, "id=%d", req->id);
+  xd_log(LOG_DEBUG, "setup=%X", req->setup);
+  xd_log(LOG_DEBUG, "type=%X", req->type);
+  xd_log(LOG_DEBUG, "endpoint=%d", req->endpoint);
+  xd_log(LOG_DEBUG, "offset=%X", req->offset);
+  xd_log(LOG_DEBUG, "length=%d", req->length);
+  xd_log(LOG_DEBUG, "nr_segments=%d", req->nr_segments);
+  xd_log(LOG_DEBUG, "flags=%X", req->flags);
+  xd_log(LOG_DEBUG, "nr_packets=%d", req->nr_packets);
+  xd_log(LOG_DEBUG, "startframe=%d", req->startframe);
 }
 
 static void print_setup(struct usb_ctrlrequest *setup)
 {
-  xd_log(LOG_DEBUG, "SETUP.bRequestType=%X\n", setup->bRequestType);
-  xd_log(LOG_DEBUG, "SETUP.bRequest=%X\n", setup->bRequest);
-  xd_log(LOG_DEBUG, "SETUP.wValue=%X\n", setup->wValue);
-  xd_log(LOG_DEBUG, "SETUP.wIndex=%X\n", setup->wIndex);
-  xd_log(LOG_DEBUG, "SETUP.wLength=%d\n", setup->wLength);
+  xd_log(LOG_DEBUG, "SETUP.bRequestType=%X", setup->bRequestType);
+  xd_log(LOG_DEBUG, "SETUP.bRequest=%X", setup->bRequest);
+  xd_log(LOG_DEBUG, "SETUP.wValue=%X", setup->wValue);
+  xd_log(LOG_DEBUG, "SETUP.wIndex=%X", setup->wIndex);
+  xd_log(LOG_DEBUG, "SETUP.wLength=%d", setup->wLength);
 }
 
 void consume_requests(struct superhid_device *dev)
@@ -65,15 +65,6 @@ void consume_requests(struct superhid_device *dev)
     responded = -1;
     switch (req.type) {
     case USBIF_T_CNTRL: /* Setup request. Ask superhid and reply. */
-      if (req.setup == 0) {
-        xd_log(LOG_ERR, "Control request with no setup value");
-        rsp.id = req.id;
-        rsp.actual_length = 0;
-        rsp.data          = 0;
-        rsp.status        = USBIF_RSP_ERROR;
-        superbackend_send(dev, &rsp);
-        break;
-      }
       memcpy(&setup, &req.setup, sizeof(struct usb_ctrlrequest));
       print_setup(&setup);
       if (req.nr_segments > 1) {
@@ -87,22 +78,27 @@ void consume_requests(struct superhid_device *dev)
       }
       if (req.nr_segments)
         buf = xc_gnttab_map_grant_ref(xcg_handle,
-                                      dev->di.di_domid,
+                                      dev->superback->di.di_domid,
                                       req.u.gref[0],
                                       PROT_READ | PROT_WRITE);
       if (buf)
         responded = superhid_setup(&setup, buf + req.offset);
       else
         responded = superhid_setup(&setup, NULL);
-      rsp.id            = req.id;
-      rsp.actual_length = responded;
-      rsp.data          = 0;
-      if (responded >= 0)
+      if (responded >= 0) {
+        rsp.id            = req.id;
+        rsp.actual_length = responded;
+        rsp.data          = 0;
         rsp.status        = USBIF_RSP_OKAY;
-      else
+      } else {
+        rsp.id            = req.id;
+        rsp.actual_length = -1;
+        rsp.data          = 0;
         rsp.status        = USBIF_RSP_EOPNOTSUPP;
+      }
       if (buf != NULL)
         xc_gnttab_munmap(xcg_handle, buf, 1);
+      superbackend_send(dev, &rsp);
       break;
     case USBIF_T_INT: /* Interrupt request. Pend it. */
       printf("pendings[%d]=%d\n", dev->pendingtail, req.id);
@@ -112,6 +108,13 @@ void consume_requests(struct superhid_device *dev)
       dev->pendingtail = (dev->pendingtail + 1) % 32;
       break;
     case USBIF_T_RESET: /* (internal) Reset request, reply and do nothing */
+      rsp.id            = req.id;
+      rsp.actual_length = 0;
+      rsp.data          = 0;
+      rsp.status        = USBIF_RSP_OKAY;
+      superbackend_send(dev, &rsp);
+      break;
+    case USBIF_T_ABORT_PIPE: /* Absolutely no idea what this is. Succeeding */
       rsp.id            = req.id;
       rsp.actual_length = 0;
       rsp.data          = 0;
@@ -155,6 +158,14 @@ void consume_requests(struct superhid_device *dev)
         superbackend_send(dev, &rsp);
       }
       break;
+    default:
+      xd_log(LOG_DEBUG, "Unknown request type %d", req.type);
+      rsp.id = req.id;
+      rsp.actual_length = -1;
+      rsp.data          = 0;
+      rsp.status        = USBIF_RSP_EOPNOTSUPP;
+      superbackend_send(dev, &rsp);
+      break;
     }
 
     dev->back_ring.req_cons++;
@@ -193,6 +204,12 @@ superback_init(xen_device_t xendev)
   return 0;
 }
 
+static void
+superback_evtchn_handler(int fd, short event, void *priv)
+{
+  backend_evtchn_handler(priv);
+}
+
 static int
 superback_connect(xen_device_t xendev)
 {
@@ -217,6 +234,11 @@ superback_connect(xen_device_t xendev)
 
   BACK_RING_INIT(&dev->back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
   dev->back_ring_ready = 1;
+
+  event_set(&dev->event, dev->evtfd, EV_READ | EV_PERSIST,
+            superback_evtchn_handler,
+            backend_evtchn_priv(dev->backend, dev->devid));
+  event_add(&dev->event, NULL);
 
   return 0;
 }

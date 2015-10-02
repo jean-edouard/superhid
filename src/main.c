@@ -35,7 +35,7 @@ void send_report(int fd, struct superhid_report *report, struct superhid_device 
   rsp.status        = USBIF_RSP_OKAY;
 
   target = xc_gnttab_map_grant_ref(xcg_handle,
-                                   dev->di.di_domid,
+                                   dev->superback->di.di_domid,
                                    dev->pendingrefs[dev->pendinghead],
                                    PROT_READ | PROT_WRITE);
   data = target + dev->pendingoffsets[dev->pendinghead];
@@ -65,64 +65,20 @@ void send_report_to_frontends(int fd, struct superhid_report *report, struct sup
   }
 }
 
-/* void send_stuffs(int fd) */
-/* { */
-/*   char buf[13]; */
-/*   int n; */
-/*   int i; */
-/*   usbif_response_t rsp; */
-/*   char *data, *target; */
+void input_handler(int fd, short event, void *priv)
+{
+  struct event *me = priv;
+  struct superhid_report report;
+  static int remaining = 0;
 
-/*   while (pendings[pendinghead] == -1 && pendinghead != pendingtail) */
-/*     pendinghead = (pendinghead + 1) % 32; */
+  report.report_id = 0;
+  remaining = superplugin_callback(fd, &report);
+  if (report.report_id != 0)
+    send_report_to_frontends(fd, &report, &superback);
 
-/*   if (pendinghead == pendingtail) */
-/*     return; */
-
-/*   n = read(fd, buf, 13); */
-/*   if (n < 12) { */
-/*     printf("just got %d: %s\n", n, buf); */
-/*     return; */
-/*   } */
-
-/*   if (!strncmp(buf, "000000000000", 12)) { */
-/*     usleep(10000); */
-/*     return; */
-/*   } */
-
-/*   rsp.id            = pendings[pendinghead]; */
-/*   rsp.actual_length = 6; */
-/*   rsp.data          = 0; */
-/*   rsp.status        = USBIF_RSP_OKAY; */
-
-/*   target = xc_gnttab_map_grant_ref(xcg_handle, */
-/*                                    backend->domid, */
-/*                                    pendingrefs[pendinghead], */
-/*                                    PROT_READ | PROT_WRITE); */
-/*   data = target + pendingoffsets[pendinghead]; */
-/*   for (i = 0; i < 12; i += 2) { */
-/*     if (buf[i] >= '0' && buf[i] <= '9') */
-/*       data[i/2] = (buf[i] - '0') << 4; */
-/*     else if (buf[i] >= 'A' && buf[i] <= 'F') */
-/*       data[i/2] = (buf[i] - 'A' + 10) << 4; */
-/*     else */
-/*       return; */
-/*     if (buf[i+1] >= '0' && buf[i+1] <= '9') */
-/*       data[i/2] |= buf[i+1] - '0'; */
-/*     else if (buf[i+1] >= 'A' && buf[i+1] <= 'F') */
-/*       data[i/2] |= buf[i+1] - 'A' + 10; */
-/*     else */
-/*       return; */
-/*     printf("%02X\n", data[i/2]); */
-/*   } */
-/*   xc_gnttab_munmap(xcg_handle, target, 1); */
-/*   memcpy(RING_GET_RESPONSE(&back_ring, back_ring.rsp_prod_pvt), &rsp, sizeof(rsp)); */
-/*   back_ring.rsp_prod_pvt++; */
-/*   RING_PUSH_RESPONSES(&back_ring); */
-/*   backend_evtchn_notify(backend->backend, backend->device->devid); */
-
-/*   pendinghead = (pendinghead + 1) % 32; */
-/* } */
+  if (remaining >= sizeof(report))
+    event_active(me, 0, 0);
+}
 
 int main(int argc, char **argv)
 {
@@ -135,21 +91,15 @@ int main(int argc, char **argv)
   xc_evtchn *ec;
   char *page;
   fd_set fds;
-  struct superhid_report report;
-  int remaining = 0;
   int fd;
-  struct superhid_backend superback;
   int i;
+  struct event input_event;
+  struct event xs_event;
 
   if (argc != 2)
     return 1;
 
   /* Globals init */
-  /* evtfd = -1; */
-  /* priv = NULL; */
-  /* back_ring_ready = 0; */
-  /* pendinghead = 0; */
-  /* pendingtail = 0; */
   xcg_handle = NULL;
 
   if (superxenstore_init() != 0)
@@ -178,10 +128,14 @@ int main(int argc, char **argv)
   ui.usb_vendor = 0x03eb;
   ui.usb_product = 0x211c;
 
+  /* Initialize SuperHID */
+  superhid_init();
+
   /* Initialize the backend */
   fd = superbackend_init();
   for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
     superback.devices[i] = NULL;
+  superback.di = di;
   superbackend_add(di, &superback);
 
   /* Create a new device on xenstore */
@@ -190,51 +144,18 @@ int main(int argc, char **argv)
   /* Grab input events for the domain */
   superfd = superplugin_init(di.di_domid);
 
-  do {
-    int fdmax = fd;
+  event_init();
 
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
-    /* FD_SET(STDIN_FILENO, &fds); */
-    FD_SET(superfd, &fds);
-    fdmax = fd;
-    if (superfd > fdmax)
-      fdmax = superfd;
-    /* if (evtfd != -1) */
-    /* { */
-    /*   FD_SET(evtfd, &fds); */
-    /*   if (evtfd > fdmax) */
-    /*     fdmax = evtfd; */
-    /* } */
+  event_set(&xs_event, fd, EV_READ | EV_PERSIST,
+            backend_xenstore_handler, NULL);
+  event_add(&xs_event, NULL);
 
-    select(fdmax + 1, &fds, NULL, NULL, NULL);
+  event_set(&input_event, superfd, EV_READ | EV_PERSIST,
+            input_handler, &input_event);
+  event_add(&input_event, NULL);
 
-    if (FD_ISSET(fd, &fds)) {
-      /* printf("fd fired\n"); */
-      backend_xenstore_handler(NULL);
-    }
-    /* if (FD_ISSET(STDIN_FILENO, &fds)) { */
-    /*   if (pending != -1 && pendingref != -1) { */
-    /*     printf("drawing!\n"); */
-    /*     send_stuffs(STDIN_FILENO); */
-    /*   } */
-    /* } */
-    /* if (evtfd != -1 && FD_ISSET(evtfd, &fds)) { */
-    /*   /\* printf("evtfd fired\n"); *\/ */
-    /*   if (priv != NULL) */
-    /*     backend_evtchn_handler(priv); */
-    /* } */
-    if (FD_ISSET(superfd, &fds) || remaining >= sizeof(report)) {
-      /* while (pendings[pendinghead] == -1 && pendinghead != pendingtail) */
-      /*   pendinghead = (pendinghead + 1) % 32; */
-      /* if (pendinghead != pendingtail) { */
-        report.report_id = 0;
-        remaining = superplugin_callback(superfd, &report);
-        if (report.report_id != 0)
-          send_report_to_frontends(superfd, &report, &superback);
-      /* } */
-    }
-  } while (1);
+  event_dispatch();
+
   xc_evtchn_close(ec);
 
   /* Cleanup */
