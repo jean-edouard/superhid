@@ -69,7 +69,7 @@ void consume_requests(struct superhid_device *dev)
       print_setup(&setup);
       if (req.nr_segments > 1) {
         xd_log(LOG_ERR, "Multiple segments not supported yet");
-        rsp.id = req.id;
+        rsp.id            = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
@@ -146,10 +146,10 @@ void consume_requests(struct superhid_device *dev)
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_USB_CANCELED;
+        superbackend_send(dev, &rsp);
         dev->pendings[i] = -1;
         dev->pendingrefs[i] = -1;
         dev->pendingoffsets[i] = -1;
-        superbackend_send(dev, &rsp);
         xd_log(LOG_DEBUG, "Cancelled %d", tocancel);
         rsp.id = req.id;
         rsp.actual_length = 0;

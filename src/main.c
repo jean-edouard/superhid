@@ -18,19 +18,29 @@
 
 #include "project.h"
 
+static void hexdump(unsigned char *data, int l)
+{
+  int i;
+
+  for (i = 0; i < l; ++i)
+    printf("%02X ", data[i]);
+  printf("sent\n");
+}
+
 void send_report(int fd, struct superhid_report *report, struct superhid_device *dev)
 {
   usbif_response_t rsp;
-  char *data, *target;
+  unsigned char *data, *target;
+  /* static int crazy = 0; */
 
-  while (dev->pendings[dev->pendinghead] == -1 && dev->pendinghead != dev->pendingtail)
+  while (dev->pendinghead != dev->pendingtail && dev->pendings[dev->pendinghead] == -1)
     dev->pendinghead = (dev->pendinghead + 1) % 32;
 
   if (dev->pendinghead == dev->pendingtail)
     return;
 
   rsp.id            = dev->pendings[dev->pendinghead];
-  rsp.actual_length = 6;
+  rsp.actual_length = SUPERHID_REPORT_LENGTH;
   rsp.data          = 0;
   rsp.status        = USBIF_RSP_OKAY;
 
@@ -38,16 +48,26 @@ void send_report(int fd, struct superhid_report *report, struct superhid_device 
                                    dev->superback->di.di_domid,
                                    dev->pendingrefs[dev->pendinghead],
                                    PROT_READ | PROT_WRITE);
+  if (target == NULL) {
+    xd_log(LOG_ERR, "Failed to map gntref %d", dev->pendingrefs[dev->pendinghead]);
+    return;
+  }
   data = target + dev->pendingoffsets[dev->pendinghead];
-  data[0] = report->report_id;
-  data[1] = report->misc;
-  data[2] = report->x & 0xFF;
-  data[3] = (report->x >> 8);
-  data[4] = report->y & 0xFF;
-  data[5] = (report->y >> 8);
+  report->count = 2;
+  report->x2 = report->x + 10;
+  report->y2 = report->y + 10;
+  report->misc2 = report->misc;
+  report->finger2 = report->finger + 1;
+  /* report->misc2 = 0x17; */
+  /* if (!(report->misc & 0x01)) */
+  /*   report->misc2 = 0x16; */
+  /* crazy = (crazy + 1) % 0x100; */
+  /* report->misc2 = crazy; */
+  memcpy(data, report, SUPERHID_REPORT_LENGTH);
 
-  printf("sending %02X %02X %02X %02X %02X %02X to %d\n",
-         data[0], data[1], data[2], data[3], data[4], data[5], dev->pendings[dev->pendinghead]);
+  /* printf("sending %02X %02X %02X %02X %02X %02X %02X to %d\n", */
+  /*        data[0], data[1], data[2], data[3], data[4], data[5], data[6], dev->pendings[dev->pendinghead]); */
+  hexdump(data, SUPERHID_REPORT_LENGTH);
 
   xc_gnttab_munmap(xcg_handle, target, 1);
   superbackend_send(dev, &rsp);
@@ -58,9 +78,11 @@ void send_report(int fd, struct superhid_report *report, struct superhid_device 
 void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
 {
   int i;
+  struct superhid_device *dev;
 
   for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
-    if (superback->devices[i] != NULL)
+    dev = superback->devices[i];
+    if (dev != NULL && dev->pendinghead != dev->pendingtail)
       send_report(fd, report, superback->devices[i]);
   }
 }
@@ -78,6 +100,11 @@ void input_handler(int fd, short event, void *priv)
 
   if (remaining >= sizeof(report))
     event_active(me, 0, 0);
+}
+
+void xenstore_handler(int fd, short event, void *priv)
+{
+  backend_xenstore_handler(NULL);
 }
 
 int main(int argc, char **argv)
@@ -125,8 +152,8 @@ int main(int argc, char **argv)
   ui.usb_virtid = 1;
   ui.usb_bus = 1;
   ui.usb_device = 1;
-  ui.usb_vendor = 0x03eb;
-  ui.usb_product = 0x211c;
+  ui.usb_vendor = SUPERHID_VENDOR;
+  ui.usb_product = SUPERHID_DEVICE;
 
   /* Initialize SuperHID */
   superhid_init();
@@ -147,7 +174,7 @@ int main(int argc, char **argv)
   event_init();
 
   event_set(&xs_event, fd, EV_READ | EV_PERSIST,
-            backend_xenstore_handler, NULL);
+            xenstore_handler, NULL);
   event_add(&xs_event, NULL);
 
   event_set(&input_event, superfd, EV_READ | EV_PERSIST,

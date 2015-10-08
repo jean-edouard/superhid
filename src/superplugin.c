@@ -30,23 +30,13 @@
 #include <linux/input.h>
 #include <fcntl.h>
 
+#include "project.h"
+
 #define SOCK_PATH               "/var/run/input_socket"
 #define MAGIC                   0xAD9CBCE9
 
 #define EVENT_SIZE              (sizeof(struct event_record))
 #define buffersize              (EVENT_SIZE*20)
-
-/* Report IDs for the various devices */
-#define REPORT_ID_KEYBOARD      0x01
-#define REPORT_ID_MOUSE         0x02
-#define REPORT_ID_TABLET        0x03
-#define REPORT_ID_MULTITOUCH    0x04
-#define REPORT_ID_STYLUS        0x05
-#define REPORT_ID_PUCK          0x06
-#define REPORT_ID_FINGER        0x07
-#define REPORT_ID_MT_MAX_COUNT  0x10
-#define REPORT_ID_CONFIG        0x11
-#define REPORT_ID_INVALID       0xff
 
 /* Shouldn't that be defined somewhere already? */
 #define ABS_MT_SLOT             0x2f
@@ -88,14 +78,6 @@ struct buffer_t
   int block;
 } buffers;
 
-struct superhid_report
-{
-  uint8_t report_id;
-  uint8_t misc;
-  uint16_t x;
-  uint16_t y;
-} __attribute__ ((__packed__));
-
 struct event recv_event;
 
 /* Some OSes swap the x,y coordinates for some reason... */
@@ -116,19 +98,23 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
   int i;
   static char just_syned = 0;
   uint8_t prevmisc;
+  static int scan_time = 0;
 
   /* Initialize the report array */
   if (report[finger].report_id == 0)
   {
     for (i = 0; i < MAX_FINGERS; ++i)
     {
+      memset(&report[i], 0, SUPERHID_REPORT_LENGTH);
       report[i].report_id = REPORT_ID_MULTITOUCH;
+      report[i].count = 1;
       report[i].misc = 0;
       /* TODO: add a bit field */
-      report[i].misc |= IN_RANGE;
-      report[i].misc |= DATA_VALID;
+      /* report[i].misc |= IN_RANGE; */
+      /* report[i].misc |= DATA_VALID; */
       /* Setting the finger ID */
-      report[i].misc |= (i << 3) & 0xF8;
+      /* report[i].misc |= (i  << 3) & 0xF8; */
+      report[i].finger = i;
     }
   }
 
@@ -140,32 +126,41 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
       /* case ABS_X: */
     case ABS_MT_POSITION_X:
       report[finger].x = ivalue >> 3;
+      /* report[finger].x = swap_bytes(ivalue >> 3); */
       break;
       /* case ABS_Y: */
     case ABS_MT_POSITION_Y:
       report[finger].y = ivalue >> 3;
+      /* report[finger].y = swap_bytes(ivalue >> 3); */
       break;
     case ABS_MT_SLOT:
       /* We force a SYN_REPORT on ABS_MT_SLOT, because the device is
        * serial. */
       /* However, we don't want to send twice the same event for
        * nothing... */
-      if (!just_syned)
+      if (!just_syned) {
+        if (finger == 0)
+          scan_time = (scan_time + 64) /* % 0xFFFFFFFF */;
+        report[finger].scan_time = scan_time;
         memcpy(res, &(report[finger]), sizeof(struct superhid_report));
+      }
       finger = ivalue;
       printf("finger %d\n", finger);
       break;
     case ABS_MT_TRACKING_ID:
       prevmisc = report[finger].misc;
       if (ivalue == 0xFFFFFFFF)
-        report[finger].misc &= ~TIP_SWITCH;
+        /* report[finger].misc &= ~TIP_SWITCH; */ report[finger].misc = 0;
       else
-        report[finger].misc |= TIP_SWITCH;
+        /* report[finger].misc |= TIP_SWITCH; */ report[finger].misc = 1;
       if (report[finger].misc != prevmisc)
         printf("misc %X -> %X\n", prevmisc, report[finger].misc);
       if (report[finger].misc < prevmisc) {
         /* The finger was just released, we may not get another event
          * for a while, let's send it */
+        if (finger == 0)
+          scan_time = (scan_time + 64) /* % 128 */;
+        report[finger].scan_time = scan_time;
         memcpy(res, &(report[finger]), sizeof(struct superhid_report));
       }
       break;
@@ -187,6 +182,9 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
     switch (icode)
     {
     case SYN_REPORT:
+      if (finger == 0)
+        scan_time = (scan_time + 64) /* % 128 */;
+      report[finger].scan_time = scan_time;
       memcpy(res, &(report[finger]), sizeof(struct superhid_report));
       just_syned = 1;
       /* re-init */

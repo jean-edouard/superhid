@@ -77,8 +77,17 @@
 
 #define DEBUG
 
-#define SUPERHID_NAME           "vusb"
-#define SUPERHID_DOMID          0
+#define SUPERHID_NAME          "vusb"
+#define SUPERHID_REAL_NAME     "SuperHID"
+/* #define SUPERHID_VENDOR        0x03eb */
+/* #define SUPERHID_DEVICE        0x211c */
+#define SUPERHID_VENDOR        0x0eef
+#define SUPERHID_DEVICE        0x7917
+#define SUPERHID_DOMID         0
+/* #define SUPERHID_REPORT_LENGTH 14 */
+#define SUPERHID_REPORT_LENGTH 0x40
+/* #define SUPERHID_FINGERS       8 */
+#define SUPERHID_FINGERS       10
 /* The following is from libxenbackend. It should be exported and bigger */
 #define BACKEND_DEVICE_MAX     16
 
@@ -89,27 +98,27 @@
 
 typedef struct dominfo
 {
-  int di_domid;
+  int   di_domid;
   char *di_name;
   char *di_dompath;
 } dominfo_t;
 
 struct superhid_device
 {
-  unsigned char devid;
-  xen_backend_t backend;
+  unsigned char            devid;
+  xen_backend_t            backend;
   struct superhid_backend *superback;
-  void *page;
-  usbif_back_ring_t back_ring;
-  unsigned int back_ring_ready:1;
-  int evtfd;
-  void *priv;
-  unsigned char pendings[32]; /* 0 <= slot <= 31 */
-  unsigned int pendingrefs[32];
-  unsigned int pendingoffsets[32];
-  char pendinghead;
-  char pendingtail;
-  struct event event;
+  void                    *page;
+  usbif_back_ring_t        back_ring;
+  unsigned int             back_ring_ready:1;
+  int                      evtfd;
+  void                    *priv;
+  char                     pendings[32]; /* -1 <= slot <= 31 */
+  int                      pendingrefs[32];
+  int                      pendingoffsets[32];
+  char                     pendinghead;
+  char                     pendingtail;
+  struct event             event;
 };
 
 struct superhid_backend
@@ -128,21 +137,21 @@ typedef struct usbinfo
 } usbinfo_t;
 
 struct hid_descriptor {
-  __u8  bLength;
-  __u8  bDescriptorType;
+  __u8   bLength;
+  __u8   bDescriptorType;
   __le16 bcdHID;
-  __u8  bCountryCode;
-  __u8  bNumDescriptors;
-  __u8  bAddDescriptorType;
-  __u16 wAddDescriptorLength;
+  __u8   bCountryCode;
+  __u8   bNumDescriptors;
+  __u8   bAddDescriptorType;
+  __u16  wAddDescriptorLength;
 } __attribute__ ((packed));
 
 struct hid_report_desc {
-  unsigned char         subclass;
-  unsigned char         protocol;
-  unsigned short        report_length;
-  unsigned short        report_desc_length;
-  unsigned char         report_desc[];
+  unsigned char  subclass;
+  unsigned char  protocol;
+  unsigned short report_length;
+  unsigned short report_desc_length;
+  unsigned char  report_desc[];
 };
 
 struct feature_report {
@@ -154,11 +163,13 @@ struct feature_report {
 #define REPORT_ID_KEYBOARD      0x01
 #define REPORT_ID_MOUSE         0x02
 #define REPORT_ID_TABLET        0x03
-#define REPORT_ID_MULTITOUCH    0x04
+/* #define REPORT_ID_MULTITOUCH    0x04 */
+#define REPORT_ID_MULTITOUCH    0x06
 #define REPORT_ID_STYLUS        0x05
 #define REPORT_ID_PUCK          0x06
 #define REPORT_ID_FINGER        0x07
-#define REPORT_ID_MT_MAX_COUNT  0x10
+/* #define REPORT_ID_MT_MAX_COUNT  0x10 */
+#define REPORT_ID_MT_MAX_COUNT  0x06
 #define REPORT_ID_CONFIG        0x11
 #define REPORT_ID_INVALID       0xff
 
