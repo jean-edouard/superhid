@@ -31,13 +31,6 @@ void send_report(int fd, struct superhid_report *report, struct superhid_device 
 {
   usbif_response_t rsp;
   unsigned char *data, *target;
-  /* static int crazy = 0; */
-
-  while (dev->pendinghead != dev->pendingtail && dev->pendings[dev->pendinghead] == -1)
-    dev->pendinghead = (dev->pendinghead + 1) % 32;
-
-  if (dev->pendinghead == dev->pendingtail)
-    return;
 
   rsp.id            = dev->pendings[dev->pendinghead];
   rsp.actual_length = SUPERHID_REPORT_LENGTH;
@@ -53,26 +46,30 @@ void send_report(int fd, struct superhid_report *report, struct superhid_device 
     return;
   }
   data = target + dev->pendingoffsets[dev->pendinghead];
-  report->count = 2;
-  report->x2 = report->x + 10;
-  report->y2 = report->y + 10;
-  report->misc2 = report->misc;
-  report->finger2 = report->finger + 1;
-  /* report->misc2 = 0x17; */
-  /* if (!(report->misc & 0x01)) */
-  /*   report->misc2 = 0x16; */
-  /* crazy = (crazy + 1) % 0x100; */
-  /* report->misc2 = crazy; */
   memcpy(data, report, SUPERHID_REPORT_LENGTH);
-
-  /* printf("sending %02X %02X %02X %02X %02X %02X %02X to %d\n", */
-  /*        data[0], data[1], data[2], data[3], data[4], data[5], data[6], dev->pendings[dev->pendinghead]); */
-  hexdump(data, SUPERHID_REPORT_LENGTH);
 
   xc_gnttab_munmap(xcg_handle, target, 1);
   superbackend_send(dev, &rsp);
 
   dev->pendinghead = (dev->pendinghead + 1) % 32;
+}
+
+bool all_pending(struct superhid_backend *superback)
+{
+  int i;
+  struct superhid_device *dev;
+
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
+    dev = superback->devices[i];
+    if (dev != NULL) {
+      while (dev->pendinghead != dev->pendingtail && dev->pendings[dev->pendinghead] == -1)
+        dev->pendinghead = (dev->pendinghead + 1) % 32;
+      if (dev->pendinghead == dev->pendingtail)
+        return false;
+    }
+  }
+
+  return true;
 }
 
 void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
@@ -91,15 +88,38 @@ void input_handler(int fd, short event, void *priv)
 {
   struct event *me = priv;
   struct superhid_report report;
-  static int remaining = 0;
+  struct superhid_report tmp;
+  int remaining = EVENT_SIZE;
+  int loops = 0;
 
-  report.report_id = 0;
-  remaining = superplugin_callback(fd, &report);
-  if (report.report_id != 0)
+  while (loops < 2 && remaining >= EVENT_SIZE && all_pending(&superback)) {
+    tmp.report_id = 0;
+    remaining = superplugin_callback(fd, &tmp);
+    if (tmp.report_id != 0) {
+      report.report_id = tmp.report_id;
+      report.count = 1;
+      report.misc = tmp.misc;
+      report.finger = tmp.finger;
+      report.x = tmp.x;
+      report.y = tmp.y;
+      if (remaining >= EVENT_SIZE) {
+        tmp.report_id = 0;
+        remaining = superplugin_callback(fd, &tmp);
+        if (tmp.report_id != 0) {
+          report.count = 2;
+          report.misc2 = tmp.misc;
+          report.finger2 = tmp.finger;
+          report.x2 = tmp.x;
+          report.y2 = tmp.y;
+        }
+      }
+    }
     send_report_to_frontends(fd, &report, &superback);
+    loops++;
+  }
 
-  if (remaining >= sizeof(report))
-    event_active(me, 0, 0);
+  if (loops == 2 && remaining >= EVENT_SIZE)
+    event_active(me, event, 0);
 }
 
 void xenstore_handler(int fd, short event, void *priv)

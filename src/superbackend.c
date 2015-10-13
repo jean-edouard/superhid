@@ -52,6 +52,7 @@ void consume_requests(struct superhid_device *dev)
   void *buf = NULL;
   uint64_t tocancel;
   int i;
+  int domids[32];
 
   if (dev->back_ring_ready != 1) {
     xd_log(LOG_ERR, "Backend not ready to consume");
@@ -67,20 +68,12 @@ void consume_requests(struct superhid_device *dev)
     case USBIF_T_CNTRL: /* Setup request. Ask superhid and reply. */
       memcpy(&setup, &req.setup, sizeof(struct usb_ctrlrequest));
       print_setup(&setup);
-      if (req.nr_segments > 1) {
-        xd_log(LOG_ERR, "Multiple segments not supported yet");
-        rsp.id            = req.id;
-        rsp.actual_length = 0;
-        rsp.data          = 0;
-        rsp.status        = USBIF_RSP_ERROR;
-        superbackend_send(dev, &rsp);
-        break;
+      if (req.nr_segments) {
+        for (i = 0; i < req.nr_segments; ++i)
+          domids[i] = dev->superback->di.di_domid;
+        buf = xc_gnttab_map_grant_refs(xcg_handle, req.nr_segments, domids,
+                                       req.u.gref, PROT_READ | PROT_WRITE);
       }
-      if (req.nr_segments)
-        buf = xc_gnttab_map_grant_ref(xcg_handle,
-                                      dev->superback->di.di_domid,
-                                      req.u.gref[0],
-                                      PROT_READ | PROT_WRITE);
       if (buf)
         responded = superhid_setup(&setup, buf + req.offset);
       else
@@ -124,7 +117,7 @@ void consume_requests(struct superhid_device *dev)
     case USBIF_T_GET_SPEED: /* (internal) Speed request, say HIGH (USB2) */
       rsp.id            = req.id;
       rsp.actual_length = 0;
-      rsp.data          = USBIF_S_HIGH;
+      rsp.data          = USBIF_S_FULL;
       rsp.status        = USBIF_RSP_OKAY;
       superbackend_send(dev, &rsp);
       break;

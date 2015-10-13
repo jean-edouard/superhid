@@ -19,43 +19,5 @@
 #ifndef   	SUPERPLUGIN_H_
 # define   	SUPERPLUGIN_H_
 
-/* struct superhid_report */
-/* { */
-/*   uint8_t  report_id; */
-/*   uint8_t  count; */
-/*   uint8_t  misc; */
-/*   uint8_t  finger; */
-/*   uint16_t x; */
-/*   uint16_t y; */
-/*   uint8_t  misc2; */
-/*   uint8_t  finger2; */
-/*   uint16_t x2; */
-/*   uint16_t y2; */
-/*   /\* uint8_t  scan_time; *\/ */
-/* } __attribute__ ((__packed__)); */
-
-struct superhid_report
-{
-  uint8_t  report_id;
-  uint8_t  count;
-  uint8_t  misc;
-  uint8_t  finger;
-  uint16_t x;
-  uint16_t y;
-  uint16_t pad1[2];
-  uint8_t  misc2;
-  uint8_t  finger2;
-  uint16_t x2;
-  uint16_t y2;
-  uint16_t pad2[2];
-  uint8_t  f3[10];
-  uint8_t  f4[10];
-  uint8_t  f5[10];
-  uint32_t scan_time;
-  uint8_t pad[8];
-} __attribute__ ((__packed__));
-
-int superplugin_callback(int fd, struct superhid_report *report);
-int superplugin_init(int domid);
 
 #endif 	    /* !SUPERPLUGIN_H_ */

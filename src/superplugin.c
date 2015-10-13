@@ -35,7 +35,6 @@
 #define SOCK_PATH               "/var/run/input_socket"
 #define MAGIC                   0xAD9CBCE9
 
-#define EVENT_SIZE              (sizeof(struct event_record))
 #define buffersize              (EVENT_SIZE*20)
 
 /* Shouldn't that be defined somewhere already? */
@@ -98,7 +97,7 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
   int i;
   static char just_syned = 0;
   uint8_t prevmisc;
-  static int scan_time = 0;
+  /* static int scan_time = 0; */
 
   /* Initialize the report array */
   if (report[finger].report_id == 0)
@@ -109,11 +108,6 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
       report[i].report_id = REPORT_ID_MULTITOUCH;
       report[i].count = 1;
       report[i].misc = 0;
-      /* TODO: add a bit field */
-      /* report[i].misc |= IN_RANGE; */
-      /* report[i].misc |= DATA_VALID; */
-      /* Setting the finger ID */
-      /* report[i].misc |= (i  << 3) & 0xF8; */
       report[i].finger = i;
     }
   }
@@ -123,44 +117,33 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
   case EV_ABS:
     switch (icode)
     {
-      /* case ABS_X: */
     case ABS_MT_POSITION_X:
       report[finger].x = ivalue >> 3;
-      /* report[finger].x = swap_bytes(ivalue >> 3); */
       break;
-      /* case ABS_Y: */
     case ABS_MT_POSITION_Y:
       report[finger].y = ivalue >> 3;
-      /* report[finger].y = swap_bytes(ivalue >> 3); */
       break;
     case ABS_MT_SLOT:
       /* We force a SYN_REPORT on ABS_MT_SLOT, because the device is
        * serial. */
       /* However, we don't want to send twice the same event for
        * nothing... */
-      if (!just_syned) {
-        if (finger == 0)
-          scan_time = (scan_time + 64) /* % 0xFFFFFFFF */;
-        report[finger].scan_time = scan_time;
+      if (!just_syned)
         memcpy(res, &(report[finger]), sizeof(struct superhid_report));
-      }
       finger = ivalue;
       printf("finger %d\n", finger);
       break;
     case ABS_MT_TRACKING_ID:
       prevmisc = report[finger].misc;
       if (ivalue == 0xFFFFFFFF)
-        /* report[finger].misc &= ~TIP_SWITCH; */ report[finger].misc = 0;
+        report[finger].misc = 0;
       else
-        /* report[finger].misc |= TIP_SWITCH; */ report[finger].misc = 1;
+        report[finger].misc = 1;
       if (report[finger].misc != prevmisc)
         printf("misc %X -> %X\n", prevmisc, report[finger].misc);
       if (report[finger].misc < prevmisc) {
         /* The finger was just released, we may not get another event
          * for a while, let's send it */
-        if (finger == 0)
-          scan_time = (scan_time + 64) /* % 128 */;
-        report[finger].scan_time = scan_time;
         memcpy(res, &(report[finger]), sizeof(struct superhid_report));
       }
       break;
@@ -182,9 +165,6 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
     switch (icode)
     {
     case SYN_REPORT:
-      if (finger == 0)
-        scan_time = (scan_time + 64) /* % 128 */;
-      report[finger].scan_time = scan_time;
       memcpy(res, &(report[finger]), sizeof(struct superhid_report));
       just_syned = 1;
       /* re-init */
@@ -212,29 +192,10 @@ static void process_event(struct event_record *r,
   uint16_t icode;
   uint32_t ivalue;
   static int dev_set;
-  static char left = 0;
-  static char middle = 0;
-  static char right = 0;
-  int relatived = 0;
 
   itype = r->itype;
   icode = r->icode;
   ivalue = r->ivalue;
-
-  if (itype == EV_KEY && icode == BTN_LEFT)
-    left = !!ivalue;
-  if (itype == EV_KEY && icode == BTN_MIDDLE)
-    middle = !!ivalue;
-  if (itype == EV_KEY && icode == BTN_RIGHT)
-    right = !!ivalue;
-
-  /* Uncomment the following line to emulate a touchscreen from a
-   * mouse */
-  /* relatived = process_relative_event(itype, icode, ivalue, left,
-   * middle, right); */
-
-  if (relatived)
-    return;
 
   if (itype == EV_DEV && icode == DEV_SET)
   {
@@ -297,7 +258,7 @@ int superplugin_callback(int fd, struct superhid_report *report)
 
   memmove(b, &b[buf->position], buf->bytes_remaining);
   buf->position = 0;
-  if (buf->bytes_remaining < sizeof(*report))
+  if (buf->bytes_remaining < EVENT_SIZE)
     n = recv(fd, &b[buf->bytes_remaining], buffersize - buf->bytes_remaining, 0);
 
   if (n + buf->bytes_remaining >= EVENT_SIZE)

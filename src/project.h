@@ -70,23 +70,21 @@
 
 #include <linux/usb/ch9.h>
 #include <linux/hid.h>
+#include <linux/hiddev.h>
 #include <xen/grant_table.h>
 
-#include "superplugin.h"
 #include "usbif.h"
 
-#define DEBUG
+/* #define DEBUG */
+
+#define EVENT_SIZE             12
 
 #define SUPERHID_NAME          "vusb"
 #define SUPERHID_REAL_NAME     "SuperHID"
-/* #define SUPERHID_VENDOR        0x03eb */
-/* #define SUPERHID_DEVICE        0x211c */
-#define SUPERHID_VENDOR        0x0eef
-#define SUPERHID_DEVICE        0x7917
+#define SUPERHID_VENDOR        0x4242
+#define SUPERHID_DEVICE        0x4242
 #define SUPERHID_DOMID         0
-/* #define SUPERHID_REPORT_LENGTH 14 */
-#define SUPERHID_REPORT_LENGTH 0x40
-/* #define SUPERHID_FINGERS       8 */
+#define SUPERHID_REPORT_LENGTH 14
 #define SUPERHID_FINGERS       10
 /* The following is from libxenbackend. It should be exported and bigger */
 #define BACKEND_DEVICE_MAX     16
@@ -157,19 +155,33 @@ struct hid_report_desc {
 struct feature_report {
   char feature;
   char value;
+  /* char id; */
 };
+
+struct superhid_report
+{
+  uint8_t  report_id;
+  uint8_t  count;
+  uint8_t  misc;
+  uint8_t  finger;
+  uint16_t x;
+  uint16_t y;
+  uint8_t  misc2;
+  uint8_t  finger2;
+  uint16_t x2;
+  uint16_t y2;
+} __attribute__ ((__packed__));
 
 /* Report IDs for the various devices */
 #define REPORT_ID_KEYBOARD      0x01
 #define REPORT_ID_MOUSE         0x02
 #define REPORT_ID_TABLET        0x03
-/* #define REPORT_ID_MULTITOUCH    0x04 */
-#define REPORT_ID_MULTITOUCH    0x06
+#define REPORT_ID_MULTITOUCH    0x04
 #define REPORT_ID_STYLUS        0x05
 #define REPORT_ID_PUCK          0x06
 #define REPORT_ID_FINGER        0x07
 /* #define REPORT_ID_MT_MAX_COUNT  0x10 */
-#define REPORT_ID_MT_MAX_COUNT  0x06
+#define REPORT_ID_MT_MAX_COUNT  0x04 /* This doesn't need its own ID */
 #define REPORT_ID_CONFIG        0x11
 #define REPORT_ID_INVALID       0xff
 
@@ -185,5 +197,7 @@ void superxenstore_close(void);
 int superbackend_init(void);
 xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
+int superplugin_callback(int fd, struct superhid_report *report);
+int superplugin_init(int domid);
 
 #endif 	    /* !PROJECT_H_ */
