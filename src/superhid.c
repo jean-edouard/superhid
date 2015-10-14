@@ -64,10 +64,10 @@
 0x75, 0x01,                     /*          Report Size (1),            */    \
 0x95, 0x01,                     /*          Report Count (1),           */    \
 0x81, 0x02,                     /*          Input (Variable),           */    \
-0x95, 0x07,                     /*          Report Count (7),           */    \
+0x95, 0x03,                     /*          Report Count (3),           */    \
 0x81, 0x03,                     /*          Input (Constant, Variable), */    \
-0x75, 0x08,                     /*          Report Size (8),            */    \
 0x09, 0x51,                     /*          Usage (51h),                */    \
+0x75, 0x04,                     /*          Report Size (4),            */    \
 0x95, 0x01,                     /*          Report Count (1),           */    \
 0x15, 0x00,                     /*          Logical Minimum (0),        */    \
 0x25, 0x20,                     /*          Logical Maximum (32),       */    \
@@ -88,6 +88,7 @@
 
 #define FINGER_LENGTH 62
 
+/* This digitizer should have SUPERHID_FINGER_WIDTH fingers */
 #define DIGITIZER                                                             \
 0x05, 0x0D,                     /*  Usage Page (Digitizer),             */    \
 0x09, 0x04,                     /*  Usage (Touchscreen),                */    \
@@ -111,7 +112,7 @@ FINGER,                                                                       \
 0xB1, 0x02,                     /*      Feature (Variable),             */    \
 0xC0,                           /*  End Collection,                     */
 
-#define DIGITIZER_LENGTH (37 + 2 * FINGER_LENGTH)
+#define DIGITIZER_LENGTH (37 + SUPERHID_FINGER_WIDTH * FINGER_LENGTH)
 
 struct hid_report_desc superhid_desc = {
   .subclass = 0, /* No subclass */

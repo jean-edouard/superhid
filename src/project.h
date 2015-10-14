@@ -86,13 +86,18 @@
 #define SUPERHID_DOMID         0
 #define SUPERHID_REPORT_LENGTH 14
 #define SUPERHID_FINGERS       10
+#define SUPERHID_FINGER_WIDTH  2 /* How many fingers in one report */
 /* The following is from libxenbackend. It should be exported and bigger */
 #define BACKEND_DEVICE_MAX     16
 
 /**
  * The (stupid) logging macro
  */
+#ifdef DEBUG
 #define xd_log(I, ...) do { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#else
+#define xd_log(I, ...) do { if (I != LOG_DEBUG) { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } } while (0)
+#endif
 
 typedef struct dominfo
 {
@@ -158,18 +163,21 @@ struct feature_report {
   /* char id; */
 };
 
+struct superhid_finger
+{
+  uint8_t  tip_switch:1;  /* Is the finger currently touching? */
+  uint8_t  placeholder:3; /* 3 spare bytes if we ever want extra
+                           * stuffs like IN_RANGE or DATA_VALID */
+  uint8_t  finger_id:4;   /* The finger ID, should be between 0 and 9 */
+  uint16_t x;             /* Absolute position of the finger on the X axis */
+  uint16_t y;             /* Absolute position of the finger on the Y axis */
+} __attribute__ ((__packed__));
+
 struct superhid_report
 {
-  uint8_t  report_id;
-  uint8_t  count;
-  uint8_t  misc;
-  uint8_t  finger;
-  uint16_t x;
-  uint16_t y;
-  uint8_t  misc2;
-  uint8_t  finger2;
-  uint16_t x2;
-  uint16_t y2;
+  uint8_t  report_id;     /* Should always be REPORT_ID_MULTITOUCH */
+  uint8_t  count;         /* How many fingers are in the packet (1/2) */
+  struct superhid_finger fingers[SUPERHID_FINGER_WIDTH];
 } __attribute__ ((__packed__));
 
 /* Report IDs for the various devices */
@@ -197,7 +205,7 @@ void superxenstore_close(void);
 int superbackend_init(void);
 xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
-int superplugin_callback(int fd, struct superhid_report *report);
+int superplugin_callback(int fd, struct superhid_finger *finger);
 int superplugin_init(int domid);
 
 #endif 	    /* !PROJECT_H_ */

@@ -87,39 +87,42 @@ void send_report_to_frontends(int fd, struct superhid_report *report, struct sup
 void input_handler(int fd, short event, void *priv)
 {
   struct event *me = priv;
-  struct superhid_report report;
-  struct superhid_report tmp;
+  struct superhid_report report = { 0 };
+  struct superhid_finger *finger;
   int remaining = EVENT_SIZE;
-  int loops = 0;
+  int sents = 0;
 
-  while (loops < 2 && remaining >= EVENT_SIZE && all_pending(&superback)) {
-    tmp.report_id = 0;
-    remaining = superplugin_callback(fd, &tmp);
-    if (tmp.report_id != 0) {
-      report.report_id = tmp.report_id;
-      report.count = 1;
-      report.misc = tmp.misc;
-      report.finger = tmp.finger;
-      report.x = tmp.x;
-      report.y = tmp.y;
-      if (remaining >= EVENT_SIZE) {
-        tmp.report_id = 0;
-        remaining = superplugin_callback(fd, &tmp);
-        if (tmp.report_id != 0) {
-          report.count = 2;
-          report.misc2 = tmp.misc;
-          report.finger2 = tmp.finger;
-          report.x2 = tmp.x;
-          report.y2 = tmp.y;
-        }
-      }
+  /* We send a maximum of 2 packets, because that's usually how
+   * many pending INT requests we have. */
+  while (sents < 2 && remaining >= EVENT_SIZE && all_pending(&superback))
+  {
+    finger = &report.fingers[report.count];
+    /* I don't think the finger ID can ever be 0xF. Use that to know
+     * if superplugin_callback succeeded */
+    finger->finger_id = 0xF;
+    remaining = superplugin_callback(fd, finger);
+    if (finger->finger_id != 0xF) {
+      report.report_id = REPORT_ID_MULTITOUCH;
+      report.count++;
     }
-    send_report_to_frontends(fd, &report, &superback);
-    loops++;
+    if (report.count == SUPERHID_FINGER_WIDTH) {
+      /* The report is full, let's send it and start a new one */
+      send_report_to_frontends(fd, &report, &superback);
+      memset(&report, 0, sizeof(report));
+      sents++;
+    }
   }
 
-  if (loops == 2 && remaining >= EVENT_SIZE)
+  if (report.count > 0) {
+    /* The loop ended on a partial report, we need to send it */
+    send_report_to_frontends(fd, &report, &superback);
+  }
+
+  if (sents == 2 && remaining >= EVENT_SIZE) {
+    /* We sent 2 packets and the input buffer still has at lease one
+     * event, we need to get rescheduled even if no more input comes */
     event_active(me, event, 0);
+  }
 }
 
 void xenstore_handler(int fd, short event, void *priv)

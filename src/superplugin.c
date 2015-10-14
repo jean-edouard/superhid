@@ -90,27 +90,18 @@ static uint16_t swap_bytes(uint16_t n)
 }
 
 static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ivalue,
-                                   struct superhid_report *res)
+                                   struct superhid_finger *res)
 {
-  static struct superhid_report report[MAX_FINGERS] = { 0 };
+  static struct superhid_finger fingers[MAX_FINGERS] = { 0 };
   static int finger = 0;
   int i;
   static char just_syned = 0;
-  uint8_t prevmisc;
-  /* static int scan_time = 0; */
+  uint8_t prevtip;
 
-  /* Initialize the report array */
-  if (report[finger].report_id == 0)
-  {
+  /* Initialize the report array. */
+  if (fingers[1].finger_id == 0)
     for (i = 0; i < MAX_FINGERS; ++i)
-    {
-      memset(&report[i], 0, SUPERHID_REPORT_LENGTH);
-      report[i].report_id = REPORT_ID_MULTITOUCH;
-      report[i].count = 1;
-      report[i].misc = 0;
-      report[i].finger = i;
-    }
-  }
+      fingers[i].finger_id = i;
 
   switch (itype)
   {
@@ -118,10 +109,10 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
     switch (icode)
     {
     case ABS_MT_POSITION_X:
-      report[finger].x = ivalue >> 3;
+      fingers[finger].x = ivalue >> 3;
       break;
     case ABS_MT_POSITION_Y:
-      report[finger].y = ivalue >> 3;
+      fingers[finger].y = ivalue >> 3;
       break;
     case ABS_MT_SLOT:
       /* We force a SYN_REPORT on ABS_MT_SLOT, because the device is
@@ -129,22 +120,20 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
       /* However, we don't want to send twice the same event for
        * nothing... */
       if (!just_syned)
-        memcpy(res, &(report[finger]), sizeof(struct superhid_report));
+        memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       finger = ivalue;
       printf("finger %d\n", finger);
       break;
     case ABS_MT_TRACKING_ID:
-      prevmisc = report[finger].misc;
+      prevtip = fingers[finger].tip_switch;
       if (ivalue == 0xFFFFFFFF)
-        report[finger].misc = 0;
+        fingers[finger].tip_switch = 0;
       else
-        report[finger].misc = 1;
-      if (report[finger].misc != prevmisc)
-        printf("misc %X -> %X\n", prevmisc, report[finger].misc);
-      if (report[finger].misc < prevmisc) {
+        fingers[finger].tip_switch = 1;
+      if (fingers[finger].tip_switch < prevtip) {
         /* The finger was just released, we may not get another event
          * for a while, let's send it */
-        memcpy(res, &(report[finger]), sizeof(struct superhid_report));
+        memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       }
       break;
     default:
@@ -165,7 +154,7 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
     switch (icode)
     {
     case SYN_REPORT:
-      memcpy(res, &(report[finger]), sizeof(struct superhid_report));
+      memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       just_syned = 1;
       /* re-init */
       /* Nothing to do? */
@@ -186,7 +175,7 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
 
 static void process_event(struct event_record *r,
                           struct buffer_t *b,
-                          struct superhid_report *report)
+                          struct superhid_finger *finger)
 {
   uint16_t itype;
   uint16_t icode;
@@ -197,10 +186,15 @@ static void process_event(struct event_record *r,
   icode = r->icode;
   ivalue = r->ivalue;
 
-  if (itype == EV_DEV && icode == DEV_SET)
+  if (itype == EV_DEV)
   {
-    dev_set = ivalue;
-    printf("DEV_SET %d\n", dev_set);
+    if (icode == DEV_SET) {
+      dev_set = ivalue;
+      printf("DEV_SET %d\n", dev_set);
+    } else {
+      printf("EV_DEV %d %d?\n", icode, ivalue);
+    }
+    return;
   }
 
 /* TODO: Here we need to figure out if dev_set is the touchscreen or not. */
@@ -219,7 +213,7 @@ static void process_event(struct event_record *r,
   }
 #endif
 
-  process_absolute_event(itype, icode, ivalue, report);
+  process_absolute_event(itype, icode, ivalue, finger);
 }
 
 static struct event_record *findnext(struct buffer_t *b)
@@ -249,7 +243,7 @@ static struct event_record *findnext(struct buffer_t *b)
     return NULL;
 }
 
-int superplugin_callback(int fd, struct superhid_report *report)
+int superplugin_callback(int fd, struct superhid_finger *finger)
 {
   int n = 0;
   struct buffer_t *buf = &buffers;
@@ -269,7 +263,7 @@ int superplugin_callback(int fd, struct superhid_report *report)
 
     r = findnext(buf);
     if (r != NULL)
-      process_event(r, buf, report);
+      process_event(r, buf, finger);
   }
   else
     buf->bytes_remaining += n;
