@@ -40,7 +40,7 @@
     0x05, 0x01,                 /*     USAGE_PAGE (Generic Desktop) */  \
     0x09, 0x30,                 /*     USAGE (X)                    */  \
     0x09, 0x31,                 /*     USAGE (Y)                    */  \
-    0x09, 0x38,                 /*     USAGE (Z)                    */  \
+    0x09, 0x38,                 /*     USAGE (wheel)                */  \
     0x15, 0x81,                 /*     LOGICAL_MINIMUM (-127)       */  \
     0x25, 0x7f,                 /*     LOGICAL_MAXIMUM (127)        */  \
     0x75, 0x08,                 /*     REPORT_SIZE (8)              */  \
@@ -70,7 +70,7 @@
 0x75, 0x01,                     /*     REPORT_SIZE (1)              */  \
 0x95, 0x03,                     /*     REPORT_COUNT (3)             */  \
 0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
-0x95, 0x06,                     /*     REPORT_COUNT (5)             */  \
+0x95, 0x05,                     /*     REPORT_COUNT (5)             */  \
 0x81, 0x03,                     /*     INPUT (Cnst, Var, Abs)       */  \
 0x26, 0xff, 0x7f,               /*     LOGICAL_MAXIMUM (32767)      */  \
 0x05, 0x01,                     /*     USAGE_PAGE (Generic Desktop) */  \
@@ -80,13 +80,45 @@
 0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
 0x09, 0x31,                     /*     USAGE (Y)                    */  \
 0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
-0x95, 0x01,                     /*     REPORT_COUNT (6)             */  \
+0x09, 0x38,                     /*     USAGE (wheel)                */  \
 0x75, 0x08,                     /*     REPORT_SIZE (8)              */  \
+0x15, 0x81,                     /*     LOGICAL_MINIMUM (-127)       */  \
+0x25, 0x7f,                     /*     LOGICAL_MAXIMUM (127)        */  \
+0x81, 0x06,                     /*     INPUT (Data,Var,Rel)         */  \
+0x95, 0x05,                     /*     REPORT_COUNT (5)             */  \
 0x81, 0x03,                     /*     INPUT (Cnst,Var,Abs)         */  \
 0xc0,                           /*   END_COLLECTION                 */  \
 0xc0                            /* END_COLLECTION                   */
 
-#define TABLET_LENGTH 57
+#define TABLET_LENGTH 65
+
+#define KEYBOARD                                                       \
+0x05, 0x01,                /*  Usage Page (Desktop),               */  \
+0x09, 0x06,                /*  Usage (Keyboard),                   */  \
+0xA1, 0x01,                /*  Collection (Application),           */  \
+0x85, REPORT_ID_KEYBOARD,  /*      REPORT_ID (1)                   */  \
+0x05, 0x07,                /*      Usage Page (Keyboard),          */  \
+0x19, 0xE0,                /*      Usage Minimum (KB Leftcontrol), */  \
+0x29, 0xE7,                /*      Usage Maximum (KB Right GUI),   */  \
+0x15, 0x00,                /*      Logical Minimum (0),            */  \
+0x25, 0x01,                /*      Logical Maximum (1),            */  \
+0x75, 0x01,                /*      Report Size (1),                */  \
+0x95, 0x08,                /*      Report Count (8),               */  \
+0x81, 0x02,                /*      Input (Variable),               */  \
+0x81, 0x01,                /*      Input (Constant),               */  \
+0x95, 0x06,                /*      Report Count (6),               */  \
+0x75, 0x08,                /*      Report Size (8),                */  \
+0x15, 0x00,                /*      Logical Minimum (0),            */  \
+0x26, 0xFF, 0x00,          /*      Logical Maximum (255),          */  \
+0x05, 0x07,                /*      Usage Page (Keyboard),          */  \
+0x19, 0x00,                /*      Usage Minimum (None),           */  \
+0x2A, 0xFF, 0x00,          /*      Usage Maximum (FFh),            */  \
+0x81, 0x00,                /*      Input,                          */  \
+0x95, 0x03,                /*      REPORT_COUNT (3)                */  \
+0x81, 0x03,                /*      INPUT (Cnst,Var,Abs)            */  \
+0xC0                       /*  End Collection                      */
+
+#define KEYBOARD_LENGTH 49
 
 #define FINGER                                                                \
 0x05, 0x0D,                     /*      Usage Page (Digitizer),         */    \
@@ -100,7 +132,7 @@
 0x81, 0x02,                     /*          Input (Variable),           */    \
 0x95, 0x03,                     /*          Report Count (3),           */    \
 0x81, 0x03,                     /*          Input (Constant, Variable), */    \
-0x09, 0x51,                     /*          Usage (51h),                */    \
+0x09, 0x51,                     /*          Usage (Contact Identifier), */    \
 0x75, 0x04,                     /*          Report Size (4),            */    \
 0x95, 0x01,                     /*          Report Count (1),           */    \
 0x15, 0x00,                     /*          Logical Minimum (0),        */    \
@@ -152,11 +184,12 @@ struct hid_report_desc superhid_desc = {
   .subclass = 0, /* No subclass */
   .protocol = 0,
   .report_length = SUPERHID_REPORT_LENGTH,
-  .report_desc_length = /* MOUSE_LENGTH +  */DIGITIZER_LENGTH + TABLET_LENGTH,
+  .report_desc_length = /* MOUSE_LENGTH +  */DIGITIZER_LENGTH + TABLET_LENGTH + KEYBOARD_LENGTH,
   .report_desc = {
     /* MOUSE, */
     DIGITIZER,
-    TABLET
+    TABLET,
+    KEYBOARD
   }
 };
 

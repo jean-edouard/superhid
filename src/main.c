@@ -114,7 +114,7 @@ void input_handler(int fd, short event, void *priv)
     }
     if (report.count == SUPERHID_FINGER_WIDTH) {
       /* The report is full, let's send it and start a new one */
-      send_report_to_frontends(fd, &report, &superback);
+      send_report_to_frontends(fd, (struct superhid_report *)&report, &superback);
       memset(&report, 0, sizeof(report));
       sents++;
     }
@@ -122,7 +122,7 @@ void input_handler(int fd, short event, void *priv)
 
   if (report.count > 0) {
     /* The loop ended on a partial report, we need to send it */
-    send_report_to_frontends(fd, &report, &superback);
+    send_report_to_frontends(fd, (struct superhid_report *)&report, &superback);
   }
 
   if (sents == 2 && remaining >= EVENT_SIZE) {

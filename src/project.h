@@ -179,7 +179,6 @@ struct superhid_report
   uint8_t  data[SUPERHID_REPORT_LENGTH - 1];
 } __attribute__ ((__packed__));
 
-
 struct superhid_report_multitouch
 {
   uint8_t  report_id;     /* Should always be REPORT_ID_MULTITOUCH */
@@ -189,15 +188,26 @@ struct superhid_report_multitouch
 
 struct superhid_report_tablet
 {
-  uint8_t  report_id;     /* Should always be REPORT_ID_MULTITOUCH */
+  uint8_t  report_id;     /* Should always be REPORT_ID_TABLET */
   uint8_t  left_click:1;
   uint8_t  right_click:1;
   uint8_t  middle_click:1;
   uint8_t  placeholder:5;
   uint16_t x;             /* Absolute position on the X axis */
   uint16_t y;             /* Absolute position on the Y axis */
-  uint8_t  pad[6];
+  int8_t   wheel;         /* Vertical scroll wheel */
+  uint8_t  pad[SUPERHID_REPORT_LENGTH - 7];
 } __attribute__ ((__packed__));
+
+struct superhid_report_keyboard
+{
+  uint8_t  report_id;     /* Should always be REPORT_ID_KEYBOARD */
+  uint8_t  modifier;
+  uint8_t  reserved;
+  uint8_t  keycode[6];
+  uint8_t  pad[SUPERHID_REPORT_LENGTH - 9];
+} __attribute__ ((__packed__));
+
 
 /* Report IDs for the various devices */
 #define REPORT_ID_KEYBOARD      0x01

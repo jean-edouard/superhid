@@ -84,39 +84,105 @@ static uint16_t swap_bytes(uint16_t n)
   return res;
 }
 
+static uint8_t find_scancode(uint8_t keycode)
+{
+  int i = 0;
+  /* linux/drivers/hid/usbhid/usbkbd.c */
+  static const uint8_t keycodes[256] = {
+    0,  0,  0,  0, 30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38,
+    50, 49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44,  2,  3,
+    4,  5,  6,  7,  8,  9, 10, 11, 28,  1, 14, 15, 57, 12, 13, 26,
+    27, 43, 43, 39, 40, 41, 51, 52, 53, 58, 59, 60, 61, 62, 63, 64,
+    65, 66, 67, 68, 87, 88, 99, 70,119,110,102,104,111,107,109,106,
+    105,108,103, 69, 98, 55, 74, 78, 96, 79, 80, 81, 75, 76, 77, 71,
+    72, 73, 82, 83, 86,127,116,117,183,184,185,186,187,188,189,190,
+    191,192,193,194,134,138,130,132,128,129,131,137,133,135,136,113,
+    115,114,  0,  0,  0,121,  0, 89, 93,124, 92, 94, 95,  0,  0,  0,
+    122,123, 90, 91, 85,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    29, 42, 56,125, 97, 54,100,126,164,166,165,163,161,115,114,113,
+    150,158,159,128,136,177,178,176,142,152,173,140
+  };
+
+  while (i < 256 && keycodes[i] != keycode)
+    ++i;
+
+  if (i == 256)
+    return 0;
+
+  return (i);
+}
+
+static uint8_t find_modifier(uint8_t keycode)
+{
+  int i = 0;
+  static const uint8_t keycodes[8] = {
+    KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_LEFTALT, KEY_LEFTMETA,
+    KEY_RIGHTCTRL, KEY_RIGHTSHIFT, KEY_RIGHTALT, KEY_RIGHTMETA
+  };
+
+  while (i < 8 && keycodes[i] != keycode)
+    ++i;
+
+  if (i == 8)
+    return 0;
+
+  return (1 << i);
+}
+
 static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, uint32_t ivalue,
                                    struct superhid_finger *res, struct superhid_report *report)
 {
   static struct superhid_finger fingers[MAX_FINGERS] = { 0 };
   static struct superhid_report_tablet tablet = { 0 };
-  static int multitouch_dev = -1;
+  static struct superhid_report_keyboard keyboard = { 0 };
+  static int multitouch_dev = -42;
   static int finger = 0;
   int i;
   static char just_syned = 0;
   uint8_t prevtip;
+  int scancode, modifier;
 
   /* Initialize the report array. */
   if (fingers[1].finger_id == 0)
     for (i = 0; i < MAX_FINGERS; ++i)
       fingers[i].finger_id = i;
 
-  if (multitouch_dev == -1)
+  if (multitouch_dev == -42)
     if (itype == EV_ABS && icode >= ABS_MT_SLOT && icode <= ABS_MT_TOOL_Y)
       multitouch_dev = dev_set;
 
   switch (itype)
   {
+  case EV_REL:
+    switch (icode)
+    {
+    case REL_WHEEL:
+      tablet.report_id = REPORT_ID_TABLET;
+      tablet.wheel = ivalue;
+      break;
+    default:
+      printf("%d REL?\n", icode);
+      break;
+    }
   case EV_ABS:
     switch (icode)
     {
+    case ABS_WHEEL:
+      tablet.report_id = REPORT_ID_TABLET;
+      tablet.wheel = ivalue;
+      break;
     case ABS_X:
-      if (multitouch_dev == -1 || dev_set != multitouch_dev) {
+      if (multitouch_dev == -42 || dev_set != multitouch_dev) {
         tablet.report_id = REPORT_ID_TABLET;
         tablet.x = ivalue;
       }
       break;
     case ABS_Y:
-      if (multitouch_dev == -1 || dev_set != multitouch_dev) {
+      if (multitouch_dev == -42 || dev_set != multitouch_dev) {
         tablet.report_id = REPORT_ID_TABLET;
         tablet.y = ivalue;
       }
@@ -170,7 +236,21 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       tablet.middle_click = !!ivalue;
       break;
     default:
-      printf("%d KEY?\n", icode);
+      keyboard.report_id = REPORT_ID_KEYBOARD;
+      modifier = find_modifier(icode);
+      if (ivalue != 0) {
+        if (modifier != 0) {
+          keyboard.modifier |= modifier;
+        } else {
+          scancode = find_scancode(icode);
+          keyboard.keycode[0] = scancode;
+        }
+      } else {
+        if (modifier != 0)
+          keyboard.modifier &= ~modifier;
+        else
+          keyboard.keycode[0] = 0;
+      }
       break;
     }
     break;
@@ -178,22 +258,34 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     switch (icode)
     {
     case SYN_REPORT:
-      if (tablet.report_id != 0) {
+      if (tablet.report_id == REPORT_ID_TABLET) {
         memcpy(report, &tablet, sizeof(*report));
         tablet.report_id = 0;
+        tablet.wheel = 0;
+      } else if (keyboard.report_id == REPORT_ID_KEYBOARD) {
+        memcpy(report, &keyboard, sizeof(*report));
+        keyboard.report_id = 0;
       } else {
         memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       }
       just_syned = 1;
       /* re-init */
       /* Nothing to do? */
-      printf("SYN_REPORT\n");
+      xd_log(LOG_DEBUG, "SYN_REPORT\n");
       return;
       break;
     default:
       printf("%d SYN?\n", icode);
       break;
     }
+  case EV_MSC:
+    switch (icode)
+    {
+    case MSC_SCAN:
+      /* This keeps happening, I don't know what it means!! */
+      break;
+    }
+    break;
   default:
     printf("%d %d?\n", itype, icode);
     break;

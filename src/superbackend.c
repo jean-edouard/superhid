@@ -94,7 +94,7 @@ void consume_requests(struct superhid_device *dev)
       superbackend_send(dev, &rsp);
       break;
     case USBIF_T_INT: /* Interrupt request. Pend it. */
-      printf("pendings[%d]=%d\n", dev->pendingtail, req.id);
+      xd_log(LOG_DEBUG, "pendings[%d]=%d\n", dev->pendingtail, req.id);
       dev->pendings[dev->pendingtail] = req.id;
       dev->pendingrefs[dev->pendingtail] = req.u.gref[0];
       dev->pendingoffsets[dev->pendingtail] = req.offset;
