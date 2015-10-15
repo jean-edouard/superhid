@@ -54,6 +54,40 @@
 
 #define MOUSE_LENGTH 60
 
+/* This is an absolute "mouse" with 2 buttons and a vertical wheel. */
+#define TABLET                                                          \
+0x05, 0x01,                     /* USAGE_PAGE (Generic Desktop)     */  \
+0x09, 0x02,                     /* USAGE (Mouse)                    */  \
+0xa1, 0x01,                     /* COLLECTION (Application)         */  \
+0x85, REPORT_ID_TABLET,         /*   REPORT_ID (3)                  */  \
+0x09, 0x01,                     /*   USAGE (Pointer)                */  \
+0xa1, 0x00,                     /*   COLLECTION (Physical)          */  \
+0x05, 0x09,                     /*     USAGE_PAGE (Button)          */  \
+0x19, 0x01,                     /*     USAGE_MINIMUM (1)            */  \
+0x29, 0x03,                     /*     USAGE_MAXIMUM (3)            */  \
+0x15, 0x00,                     /*     LOGICAL_MINIMUM (0)          */  \
+0x25, 0x01,                     /*     LOGICAL_MAXIMUM (1)          */  \
+0x75, 0x01,                     /*     REPORT_SIZE (1)              */  \
+0x95, 0x03,                     /*     REPORT_COUNT (3)             */  \
+0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
+0x95, 0x06,                     /*     REPORT_COUNT (5)             */  \
+0x81, 0x03,                     /*     INPUT (Cnst, Var, Abs)       */  \
+0x26, 0xff, 0x7f,               /*     LOGICAL_MAXIMUM (32767)      */  \
+0x05, 0x01,                     /*     USAGE_PAGE (Generic Desktop) */  \
+0x75, 0x10,                     /*     REPORT_SIZE (16)             */  \
+0x95, 0x01,                     /*     REPORT_COUNT (1)             */  \
+0x09, 0x30,                     /*     USAGE (X)                    */  \
+0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
+0x09, 0x31,                     /*     USAGE (Y)                    */  \
+0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
+0x95, 0x01,                     /*     REPORT_COUNT (6)             */  \
+0x75, 0x08,                     /*     REPORT_SIZE (8)              */  \
+0x81, 0x03,                     /*     INPUT (Cnst,Var,Abs)         */  \
+0xc0,                           /*   END_COLLECTION                 */  \
+0xc0                            /* END_COLLECTION                   */
+
+#define TABLET_LENGTH 57
+
 #define FINGER                                                                \
 0x05, 0x0D,                     /*      Usage Page (Digitizer),         */    \
 0x09, 0x22,                     /*      Usage (Finger),                 */    \
@@ -95,7 +129,7 @@
 0xA1, 0x01,                     /*  Collection (Application),           */    \
 0x85, REPORT_ID_MULTITOUCH,     /*      Report ID (4),                  */    \
 0x05, 0x0D,                     /*      Usage Page (Digitizer),         */    \
-0x09, 0x54,                     /*      Usage (54h),                    */    \
+0x09, 0x54,                     /*      Usage (Contact Count),          */    \
 0x75, 0x08,                     /*      Report Size (8),                */    \
 0x15, 0x00,                     /*      Logical Minimum (0),            */    \
 0x25, 0x0C,                     /*      Logical Maximum (12),           */    \
@@ -110,7 +144,7 @@ FINGER,                                                                       \
 0x75, 0x08,                     /*      Report Size (8),                */    \
 0x95, 0x01,                     /*      Report Count (1),               */    \
 0xB1, 0x02,                     /*      Feature (Variable),             */    \
-0xC0,                           /*  End Collection,                     */
+0xC0                            /*  End Collection,                     */
 
 #define DIGITIZER_LENGTH (37 + SUPERHID_FINGER_WIDTH * FINGER_LENGTH)
 
@@ -118,10 +152,11 @@ struct hid_report_desc superhid_desc = {
   .subclass = 0, /* No subclass */
   .protocol = 0,
   .report_length = SUPERHID_REPORT_LENGTH,
-  .report_desc_length = /* MOUSE_LENGTH +  */DIGITIZER_LENGTH,
+  .report_desc_length = /* MOUSE_LENGTH +  */DIGITIZER_LENGTH + TABLET_LENGTH,
   .report_desc = {
     /* MOUSE, */
-    DIGITIZER
+    DIGITIZER,
+    TABLET
   }
 };
 

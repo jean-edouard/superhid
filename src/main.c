@@ -87,7 +87,8 @@ void send_report_to_frontends(int fd, struct superhid_report *report, struct sup
 void input_handler(int fd, short event, void *priv)
 {
   struct event *me = priv;
-  struct superhid_report report = { 0 };
+  struct superhid_report_multitouch report = { 0 };
+  struct superhid_report custom_report = { 0 };
   struct superhid_finger *finger;
   int remaining = EVENT_SIZE;
   int sents = 0;
@@ -100,7 +101,13 @@ void input_handler(int fd, short event, void *priv)
     /* I don't think the finger ID can ever be 0xF. Use that to know
      * if superplugin_callback succeeded */
     finger->finger_id = 0xF;
-    remaining = superplugin_callback(fd, finger);
+    remaining = superplugin_callback(fd, finger, &custom_report);
+    if (custom_report.report_id != 0) {
+      send_report_to_frontends(fd, &custom_report, &superback);
+      memset(&custom_report, 0, sizeof(report));
+      sents++;
+      continue;
+    }
     if (finger->finger_id != 0xF) {
       report.report_id = REPORT_ID_MULTITOUCH;
       report.count++;
@@ -119,7 +126,7 @@ void input_handler(int fd, short event, void *priv)
   }
 
   if (sents == 2 && remaining >= EVENT_SIZE) {
-    /* We sent 2 packets and the input buffer still has at lease one
+    /* We sent 2 packets and the input buffer still has at least one
      * event, we need to get rescheduled even if no more input comes */
     event_active(me, event, 0);
   }

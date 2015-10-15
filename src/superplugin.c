@@ -44,11 +44,6 @@
 
 /* All the following is specific to the superhid digitizer */
 #define TIP_SWITCH              0x01
-#define IN_RANGE                0x02
-#define DATA_VALID              0x04
-#define FINGER_1                0x08
-#define FINGER_2                0x10
-#define FINGER_3                0x18
 
 #define LOW_X                   0
 #define HIGH_X                  0xFFF
@@ -89,10 +84,12 @@ static uint16_t swap_bytes(uint16_t n)
   return res;
 }
 
-static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ivalue,
-                                   struct superhid_finger *res)
+static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, uint32_t ivalue,
+                                   struct superhid_finger *res, struct superhid_report *report)
 {
   static struct superhid_finger fingers[MAX_FINGERS] = { 0 };
+  static struct superhid_report_tablet tablet = { 0 };
+  static int multitouch_dev = -1;
   static int finger = 0;
   int i;
   static char just_syned = 0;
@@ -103,11 +100,27 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
     for (i = 0; i < MAX_FINGERS; ++i)
       fingers[i].finger_id = i;
 
+  if (multitouch_dev == -1)
+    if (itype == EV_ABS && icode >= ABS_MT_SLOT && icode <= ABS_MT_TOOL_Y)
+      multitouch_dev = dev_set;
+
   switch (itype)
   {
   case EV_ABS:
     switch (icode)
     {
+    case ABS_X:
+      if (multitouch_dev == -1 || dev_set != multitouch_dev) {
+        tablet.report_id = REPORT_ID_TABLET;
+        tablet.x = ivalue;
+      }
+      break;
+    case ABS_Y:
+      if (multitouch_dev == -1 || dev_set != multitouch_dev) {
+        tablet.report_id = REPORT_ID_TABLET;
+        tablet.y = ivalue;
+      }
+      break;
     case ABS_MT_POSITION_X:
       fingers[finger].x = ivalue >> 3;
       break;
@@ -137,14 +150,25 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
       }
       break;
     default:
-      if (icode != ABS_X && icode != ABS_Y)
-        printf("%d ABS?\n", icode);
+      printf("%d ABS?\n", icode);
       break;
     }
     break;
   case EV_KEY:
     switch (icode)
     {
+    case BTN_LEFT:
+      tablet.report_id = REPORT_ID_TABLET;
+      tablet.left_click = !!ivalue;
+      break;
+    case BTN_RIGHT:
+      tablet.report_id = REPORT_ID_TABLET;
+      tablet.right_click = !!ivalue;
+      break;
+    case BTN_MIDDLE:
+      tablet.report_id = REPORT_ID_TABLET;
+      tablet.middle_click = !!ivalue;
+      break;
     default:
       printf("%d KEY?\n", icode);
       break;
@@ -154,7 +178,12 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
     switch (icode)
     {
     case SYN_REPORT:
-      memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
+      if (tablet.report_id != 0) {
+        memcpy(report, &tablet, sizeof(*report));
+        tablet.report_id = 0;
+      } else {
+        memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
+      }
       just_syned = 1;
       /* re-init */
       /* Nothing to do? */
@@ -175,7 +204,8 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
 
 static void process_event(struct event_record *r,
                           struct buffer_t *b,
-                          struct superhid_finger *finger)
+                          struct superhid_finger *finger,
+                          struct superhid_report *report)
 {
   uint16_t itype;
   uint16_t icode;
@@ -213,7 +243,7 @@ static void process_event(struct event_record *r,
   }
 #endif
 
-  process_absolute_event(itype, icode, ivalue, finger);
+  process_absolute_event(dev_set, itype, icode, ivalue, finger, report);
 }
 
 static struct event_record *findnext(struct buffer_t *b)
@@ -243,7 +273,7 @@ static struct event_record *findnext(struct buffer_t *b)
     return NULL;
 }
 
-int superplugin_callback(int fd, struct superhid_finger *finger)
+int superplugin_callback(int fd, struct superhid_finger *finger, struct superhid_report *report)
 {
   int n = 0;
   struct buffer_t *buf = &buffers;
@@ -263,7 +293,7 @@ int superplugin_callback(int fd, struct superhid_finger *finger)
 
     r = findnext(buf);
     if (r != NULL)
-      process_event(r, buf, finger);
+      process_event(r, buf, finger, report);
   }
   else
     buf->bytes_remaining += n;

@@ -84,7 +84,7 @@
 #define SUPERHID_VENDOR        0x4242
 #define SUPERHID_DEVICE        0x4242
 #define SUPERHID_DOMID         0
-#define SUPERHID_REPORT_LENGTH 14
+#define SUPERHID_REPORT_LENGTH 12
 #define SUPERHID_FINGERS       10
 #define SUPERHID_FINGER_WIDTH  2 /* How many fingers in one report */
 /* The following is from libxenbackend. It should be exported and bigger */
@@ -175,9 +175,28 @@ struct superhid_finger
 
 struct superhid_report
 {
+  uint8_t  report_id;
+  uint8_t  data[SUPERHID_REPORT_LENGTH - 1];
+} __attribute__ ((__packed__));
+
+
+struct superhid_report_multitouch
+{
   uint8_t  report_id;     /* Should always be REPORT_ID_MULTITOUCH */
   uint8_t  count;         /* How many fingers are in the packet (1/2) */
   struct superhid_finger fingers[SUPERHID_FINGER_WIDTH];
+} __attribute__ ((__packed__));
+
+struct superhid_report_tablet
+{
+  uint8_t  report_id;     /* Should always be REPORT_ID_MULTITOUCH */
+  uint8_t  left_click:1;
+  uint8_t  right_click:1;
+  uint8_t  middle_click:1;
+  uint8_t  placeholder:5;
+  uint16_t x;             /* Absolute position on the X axis */
+  uint16_t y;             /* Absolute position on the Y axis */
+  uint8_t  pad[6];
 } __attribute__ ((__packed__));
 
 /* Report IDs for the various devices */
@@ -205,7 +224,7 @@ void superxenstore_close(void);
 int superbackend_init(void);
 xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
-int superplugin_callback(int fd, struct superhid_finger *finger);
+int superplugin_callback(int fd, struct superhid_finger *finger, struct superhid_report *report);
 int superplugin_init(int domid);
 
 #endif 	    /* !PROJECT_H_ */
