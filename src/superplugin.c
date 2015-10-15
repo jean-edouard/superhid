@@ -176,12 +176,14 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       tablet.wheel = ivalue;
       break;
     case ABS_X:
+      /* Sometimes we get ABS_X events from digitizers... */
       if (multitouch_dev == -42 || dev_set != multitouch_dev) {
         tablet.report_id = REPORT_ID_TABLET;
         tablet.x = ivalue;
       }
       break;
     case ABS_Y:
+      /* Sometimes we get ABS_Y events from digitizers... */
       if (multitouch_dev == -42 || dev_set != multitouch_dev) {
         tablet.report_id = REPORT_ID_TABLET;
         tablet.y = ivalue;
@@ -201,7 +203,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       if (!just_syned)
         memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       finger = ivalue;
-      printf("finger %d\n", finger);
+      xd_log(LOG_DEBUG, "finger %d", finger);
       break;
     case ABS_MT_TRACKING_ID:
       prevtip = fingers[finger].tip_switch;
@@ -235,22 +237,31 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       tablet.report_id = REPORT_ID_TABLET;
       tablet.middle_click = !!ivalue;
       break;
+    case BTN_TOUCH:
+      /* Am I supposed to do something here? */
+      break;
+    case KEY_RESERVED:
+      /* We get that from the touchscreen... ?! */
+      break;
     default:
-      keyboard.report_id = REPORT_ID_KEYBOARD;
-      modifier = find_modifier(icode);
-      if (ivalue != 0) {
-        if (modifier != 0) {
-          keyboard.modifier |= modifier;
+      if (icode < 0x100) {
+        keyboard.report_id = REPORT_ID_KEYBOARD;
+        modifier = find_modifier(icode);
+        if (ivalue != 0) {
+          if (modifier != 0) {
+            keyboard.modifier |= modifier;
+          } else {
+            scancode = find_scancode(icode);
+            keyboard.keycode[0] = scancode;
+          }
         } else {
-          scancode = find_scancode(icode);
-          keyboard.keycode[0] = scancode;
+          if (modifier != 0)
+            keyboard.modifier &= ~modifier;
+          else
+            keyboard.keycode[0] = 0;
         }
-      } else {
-        if (modifier != 0)
-          keyboard.modifier &= ~modifier;
-        else
-          keyboard.keycode[0] = 0;
-      }
+      } else
+        printf("%d KEY?\n", icode);
       break;
     }
     break;
