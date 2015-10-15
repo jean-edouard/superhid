@@ -139,6 +139,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
   static struct superhid_finger fingers[MAX_FINGERS] = { 0 };
   static struct superhid_report_tablet tablet = { 0 };
   static struct superhid_report_keyboard keyboard = { 0 };
+  static struct superhid_report_mouse mouse = { 0 };
   static int multitouch_dev = -42;
   static int finger = 0;
   int i;
@@ -160,9 +161,17 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
   case EV_REL:
     switch (icode)
     {
+    case REL_X:
+      mouse.report_id = REPORT_ID_MOUSE;
+      mouse.x = ivalue;
+      break;
+    case REL_Y:
+      mouse.report_id = REPORT_ID_MOUSE;
+      mouse.y = ivalue;
+      break;
     case REL_WHEEL:
-      tablet.report_id = REPORT_ID_TABLET;
-      tablet.wheel = ivalue;
+      mouse.report_id = REPORT_ID_MOUSE;
+      mouse.wheel = ivalue;
       break;
     default:
       printf("%d REL?\n", icode);
@@ -172,8 +181,8 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     switch (icode)
     {
     case ABS_WHEEL:
-      tablet.report_id = REPORT_ID_TABLET;
-      tablet.wheel = ivalue;
+      /* tablet.report_id = REPORT_ID_TABLET; */
+      /* tablet.wheel = ivalue; */
       break;
     case ABS_X:
       /* Sometimes we get ABS_X events from digitizers... */
@@ -276,6 +285,9 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       } else if (keyboard.report_id == REPORT_ID_KEYBOARD) {
         memcpy(report, &keyboard, sizeof(*report));
         keyboard.report_id = 0;
+      } else if (mouse.report_id == REPORT_ID_MOUSE) {
+        memcpy(report, &mouse, sizeof(*report));
+        memset(&mouse, 0, sizeof(mouse));
       } else {
         memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       }

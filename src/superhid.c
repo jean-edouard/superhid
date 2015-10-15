@@ -46,7 +46,7 @@
     0x75, 0x08,                 /*     REPORT_SIZE (8)              */  \
     0x95, 0x03,                 /*     REPORT_COUNT (3)             */  \
     0x81, 0x06,                 /*     INPUT (Data,Var,Rel)         */  \
-    0x95, 0x01,                 /*     REPORT_COUNT (1)             */  \
+    0x95, 0x07,                 /*     REPORT_COUNT (7)             */  \
     0x75, 0x08,                 /*     REPORT_SIZE (8)              */  \
     0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */  \
     0xc0,                       /*   END_COLLECTION                 */  \
@@ -80,17 +80,13 @@
 0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
 0x09, 0x31,                     /*     USAGE (Y)                    */  \
 0x81, 0x02,                     /*     INPUT (Data, Var, Abs)       */  \
-0x09, 0x38,                     /*     USAGE (wheel)                */  \
 0x75, 0x08,                     /*     REPORT_SIZE (8)              */  \
-0x15, 0x81,                     /*     LOGICAL_MINIMUM (-127)       */  \
-0x25, 0x7f,                     /*     LOGICAL_MAXIMUM (127)        */  \
-0x81, 0x06,                     /*     INPUT (Data,Var,Rel)         */  \
 0x95, 0x05,                     /*     REPORT_COUNT (5)             */  \
 0x81, 0x03,                     /*     INPUT (Cnst,Var,Abs)         */  \
 0xc0,                           /*   END_COLLECTION                 */  \
 0xc0                            /* END_COLLECTION                   */
 
-#define TABLET_LENGTH 65
+#define TABLET_LENGTH 57
 
 #define KEYBOARD                                                       \
 0x05, 0x01,                /*  Usage Page (Desktop),               */  \
@@ -184,9 +180,9 @@ struct hid_report_desc superhid_desc = {
   .subclass = 0, /* No subclass */
   .protocol = 0,
   .report_length = SUPERHID_REPORT_LENGTH,
-  .report_desc_length = /* MOUSE_LENGTH +  */DIGITIZER_LENGTH + TABLET_LENGTH + KEYBOARD_LENGTH,
+  .report_desc_length = MOUSE_LENGTH + DIGITIZER_LENGTH + TABLET_LENGTH + KEYBOARD_LENGTH,
   .report_desc = {
-    /* MOUSE, */
+    MOUSE,
     DIGITIZER,
     TABLET,
     KEYBOARD

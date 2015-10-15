@@ -208,6 +208,20 @@ struct superhid_report_keyboard
   uint8_t  pad[SUPERHID_REPORT_LENGTH - 9];
 } __attribute__ ((__packed__));
 
+struct superhid_report_mouse
+{
+  uint8_t  report_id;     /* Should always be REPORT_ID_MOUSE */
+  uint8_t  left_click:1;
+  uint8_t  right_click:1;
+  uint8_t  middle_click:1;
+  uint8_t  fourth_click:1;
+  uint8_t  fifth_click:1;
+  uint8_t  placeholder:3;
+  uint8_t  x;
+  uint8_t  y;
+  uint8_t  wheel;
+  uint8_t  pad[SUPERHID_REPORT_LENGTH - 5];
+} __attribute__ ((__packed__));
 
 /* Report IDs for the various devices */
 #define REPORT_ID_KEYBOARD      0x01
