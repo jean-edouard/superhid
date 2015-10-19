@@ -79,6 +79,7 @@
 
 #define EVENT_SIZE             12
 
+#define SUPERHID_VM_TYPE       "svm"
 #define SUPERHID_NAME          "vusb"
 #define SUPERHID_REAL_NAME     "SuperHID"
 #define SUPERHID_VENDOR        0x4242
@@ -86,7 +87,8 @@
 #define SUPERHID_DOMID         0
 #define SUPERHID_REPORT_LENGTH 12
 #define SUPERHID_FINGERS       10
-#define SUPERHID_FINGER_WIDTH  2 /* How many fingers in one report */
+#define SUPERHID_FINGER_WIDTH  2  /* How many fingers in one report */
+#define SUPERHID_MAX_BACKENDS  32 /* 32 running VMs should be plenty */
 /* The following is from libxenbackend. It should be exported and bigger */
 #define BACKEND_DEVICE_MAX     16
 
@@ -128,6 +130,12 @@ struct superhid_backend
 {
   struct superhid_device *devices[BACKEND_DEVICE_MAX];
   dominfo_t di;
+};
+
+struct superhid_input_event
+{
+  struct event event;
+  int domid;
 };
 
 typedef struct usbinfo
@@ -237,18 +245,22 @@ struct superhid_report_mouse
 #define REPORT_ID_INVALID       0xff
 
 xc_gnttab *xcg_handle;
-struct superhid_backend superback;
+struct superhid_backend superbacks[SUPERHID_MAX_BACKENDS];
 
 void superhid_init(void);
 int superhid_setup(struct usb_ctrlrequest *setup, void *buf);
 int superxenstore_init(void);
 int superxenstore_get_dominfo(int domid, dominfo_t *di);
 int superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
+void superxenstore_handler(void);
 void superxenstore_close(void);
 int superbackend_init(void);
 xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
+int superbackend_find_slot(int domid);
+int superbackend_find_free_slot(void);
 int superplugin_callback(int fd, struct superhid_finger *finger, struct superhid_report *report);
 int superplugin_init(int domid);
+void input_handler(int fd, short event, void *priv);
 
 #endif 	    /* !PROJECT_H_ */

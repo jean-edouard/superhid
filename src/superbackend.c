@@ -295,6 +295,10 @@ static struct xen_backend_ops superback_ops = {
 
 int superbackend_init(void)
 {
+  int i;
+
+  memset(superbacks, 0, sizeof(struct superhid_backend) * SUPERHID_MAX_BACKENDS);
+
   if (backend_init(SUPERHID_DOMID)) {
     xd_log(LOG_ERR, "Failed to initialize libxenbackend");
     return -1;
@@ -323,4 +327,30 @@ void superbackend_send(struct superhid_device *device, usbif_response_t *rsp)
   device->back_ring.rsp_prod_pvt++;
   RING_PUSH_RESPONSES(&device->back_ring);
   backend_evtchn_notify(device->backend, device->devid);
+}
+
+int superbackend_find_slot(int domid)
+{
+  int i = 0;
+
+  while (i < SUPERHID_MAX_BACKENDS && superbacks[i].di.di_domid != domid)
+    ++i;
+
+  if (i == SUPERHID_MAX_BACKENDS)
+    return -1;
+  else
+    return i;
+}
+
+int superbackend_find_free_slot(void)
+{
+  int i = 0;
+
+  while (i < SUPERHID_MAX_BACKENDS && superbacks[i].di.di_dompath != NULL)
+    ++i;
+
+  if (i == SUPERHID_MAX_BACKENDS)
+    return -1;
+  else
+    return i;
 }

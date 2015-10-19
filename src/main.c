@@ -54,7 +54,7 @@ void send_report(int fd, struct superhid_report *report, struct superhid_device 
   dev->pendinghead = (dev->pendinghead + 1) % 32;
 }
 
-bool all_pending(struct superhid_backend *superback)
+static bool all_pending(struct superhid_backend *superback)
 {
   int i;
   struct superhid_device *dev;
@@ -72,7 +72,7 @@ bool all_pending(struct superhid_backend *superback)
   return true;
 }
 
-void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
+static void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
 {
   int i;
   struct superhid_device *dev;
@@ -86,16 +86,24 @@ void send_report_to_frontends(int fd, struct superhid_report *report, struct sup
 
 void input_handler(int fd, short event, void *priv)
 {
-  struct event *me = priv;
+  struct superhid_input_event *input_event = priv;
   struct superhid_report_multitouch report = { 0 };
   struct superhid_report custom_report = { 0 };
   struct superhid_finger *finger;
   int remaining = EVENT_SIZE;
   int sents = 0;
+  int domid, slot;
+
+  domid = input_event->domid;
+  slot = superbackend_find_slot(domid);
+  if (slot == -1) {
+    xd_log(LOG_ERR, "Could not find a backend for domid %d", domid);
+    return;
+  }
 
   /* We send a maximum of 2 packets, because that's usually how
    * many pending INT requests we have. */
-  while (sents < 2 && remaining >= EVENT_SIZE && all_pending(&superback))
+  while (sents < 2 && remaining >= EVENT_SIZE && all_pending(&superbacks[slot]))
   {
     finger = &report.fingers[report.count];
     /* I don't think the finger ID can ever be 0xF. Use that to know
@@ -103,7 +111,7 @@ void input_handler(int fd, short event, void *priv)
     finger->finger_id = 0xF;
     remaining = superplugin_callback(fd, finger, &custom_report);
     if (custom_report.report_id != 0) {
-      send_report_to_frontends(fd, &custom_report, &superback);
+      send_report_to_frontends(fd, &custom_report, &superbacks[slot]);
       memset(&custom_report, 0, sizeof(report));
       sents++;
       continue;
@@ -114,7 +122,7 @@ void input_handler(int fd, short event, void *priv)
     }
     if (report.count == SUPERHID_FINGER_WIDTH) {
       /* The report is full, let's send it and start a new one */
-      send_report_to_frontends(fd, (struct superhid_report *)&report, &superback);
+      send_report_to_frontends(fd, (struct superhid_report *)&report, &superbacks[slot]);
       memset(&report, 0, sizeof(report));
       sents++;
     }
@@ -122,46 +130,43 @@ void input_handler(int fd, short event, void *priv)
 
   if (report.count > 0) {
     /* The loop ended on a partial report, we need to send it */
-    send_report_to_frontends(fd, (struct superhid_report *)&report, &superback);
+    send_report_to_frontends(fd, (struct superhid_report *)&report, &superbacks[slot]);
   }
 
   if (sents == 2 && remaining >= EVENT_SIZE) {
     /* We sent 2 packets and the input buffer still has at least one
      * event, we need to get rescheduled even if no more input comes */
-    event_active(me, event, 0);
+    event_active(&input_event->event, event, 0);
   }
 }
 
 void xenstore_handler(int fd, short event, void *priv)
+{
+  superxenstore_handler();
+}
+
+void xenstore_back_handler(int fd, short event, void *priv)
 {
   backend_xenstore_handler(NULL);
 }
 
 int main(int argc, char **argv)
 {
-  usbinfo_t ui;
-  dominfo_t di;
-  int domid, ret;
-  char path[256], token[256];
-  char* res;
-  int ring, evtchn, superfd;
-  xc_evtchn *ec;
-  char *page;
-  fd_set fds;
-  int fd;
-  int i;
-  struct event input_event;
-  struct event xs_event;
+  struct event xs_event, xs_back_event;
+  int xs_fd, xs_back_fd;
 
-  if (argc != 2)
+  if (argc != 1)
     return 1;
 
   /* Globals init */
   xcg_handle = NULL;
 
-  if (superxenstore_init() != 0)
+  /* Initialize XenStore */
+  xs_fd = superxenstore_init();
+  if (xs_fd < 0)
     return 1;
 
+  /* Initialize gnttab */
   if (xcg_handle == NULL) {
     xcg_handle = xc_gnttab_open(NULL, 0);
   }
@@ -170,50 +175,23 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  /* Fill the domain info */
-  domid = strtol(argv[1], NULL, 10);
-  ret = superxenstore_get_dominfo(domid, &di);
-  if (ret != 0) {
-    xd_log(LOG_ERR, "Invalid domid %d", domid);
-    return 1;
-  }
-
-  /* Fill the device info */
-  ui.usb_virtid = 1;
-  ui.usb_bus = 1;
-  ui.usb_device = 1;
-  ui.usb_vendor = SUPERHID_VENDOR;
-  ui.usb_product = SUPERHID_DEVICE;
-
   /* Initialize SuperHID */
   superhid_init();
 
   /* Initialize the backend */
-  fd = superbackend_init();
-  for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
-    superback.devices[i] = NULL;
-  superback.di = di;
-  superbackend_add(di, &superback);
-
-  /* Create a new device on xenstore */
-  superxenstore_create_usb(&di, &ui);
-
-  /* Grab input events for the domain */
-  superfd = superplugin_init(di.di_domid);
+  xs_back_fd = superbackend_init();
 
   event_init();
 
-  event_set(&xs_event, fd, EV_READ | EV_PERSIST,
+  event_set(&xs_event, xs_fd, EV_READ | EV_PERSIST,
             xenstore_handler, NULL);
   event_add(&xs_event, NULL);
 
-  event_set(&input_event, superfd, EV_READ | EV_PERSIST,
-            input_handler, &input_event);
-  event_add(&input_event, NULL);
+  event_set(&xs_back_event, xs_back_fd, EV_READ | EV_PERSIST,
+            xenstore_back_handler, NULL);
+  event_add(&xs_back_event, NULL);
 
   event_dispatch();
-
-  xc_evtchn_close(ec);
 
   /* Cleanup */
   superxenstore_close();

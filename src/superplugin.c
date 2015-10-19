@@ -448,7 +448,7 @@ int superplugin_init(int domid)
     exit(1);
   }
 
-  printf ("Trying to connect...\n");
+  printf("Trying to grab events for domid %d...\n", domid);
 
   remote.sun_family = AF_UNIX;
   strcpy (remote.sun_path, SOCK_PATH);
@@ -459,7 +459,7 @@ int superplugin_init(int domid)
     exit(1);
   }
 
-  printf("Connected.\n");
+  printf("Grabbed.\n");
 
   buffers.bytes_remaining = 0;
   buffers.position = 0;

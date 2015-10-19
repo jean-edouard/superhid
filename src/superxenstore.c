@@ -24,7 +24,7 @@ enum XenBusStates {
 };
 
 static struct xs_handle *xs_handle;
-char *xs_dom0path = NULL;
+static char *xs_dom0path = NULL;
 
 static void*
 xmalloc(size_t size)
@@ -279,6 +279,104 @@ superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   return -1;
 }
 
+static void spawn(int domid)
+{
+  usbinfo_t ui;
+  dominfo_t di;
+  int superfd;
+  int i, ret;
+  struct superhid_input_event *input_event;
+  int slot;
+
+  slot = superbackend_find_free_slot();
+  if (slot == -1) {
+    xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n");
+    return;
+  }
+
+  /* Fill the domain info */
+  ret = superxenstore_get_dominfo(domid, &di);
+  if (ret != 0) {
+    xd_log(LOG_ERR, "Invalid domid %d", domid);
+    return;
+  }
+
+  /* Fill the device info */
+  ui.usb_virtid = 1;
+  ui.usb_bus = 1;
+  ui.usb_device = 1;
+  ui.usb_vendor = SUPERHID_VENDOR;
+  ui.usb_product = SUPERHID_DEVICE;
+
+  /* Create the backend */
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
+    superbacks[slot].devices[i] = NULL;
+  superbacks[slot].di = di;
+  superbackend_add(di, &superbacks[slot]);
+
+  /* Create a new device on xenstore */
+  superxenstore_create_usb(&di, &ui);
+
+  /* Grab input events for the domain */
+  superfd = superplugin_init(di.di_domid);
+
+  input_event = malloc(sizeof(*input_event));
+  input_event->domid = domid;
+  event_set(&input_event->event, superfd, EV_READ | EV_PERSIST,
+            input_handler, input_event);
+  event_add(&input_event->event, NULL);
+}
+
+void superxenstore_handler(void)
+{
+  int i, n, len;
+  char **paths;
+  char path[256] = { 0 };
+  char *state, *value, *type;
+  int domid;
+  int slot;
+
+  /* Watch away */
+  paths = xs_read_watch(xs_handle, &len);
+  free(paths);
+
+  /* List VMs */
+  paths = xs_directory(xs_handle, XBT_NULL, "/vm", &n);
+  for (i = 0; i < n; ++i) {
+    /* Ignore non-SVMs */
+    snprintf(path, 256, "/xenmgr/vms/%s/type", paths[i]);
+    type = xs_read(xs_handle, XBT_NULL, path, &len);
+    if (type == NULL)
+      continue;
+    if (strcmp(type, SUPERHID_VM_TYPE)) {
+      free(type);
+      continue;
+    } else
+      free(type);
+    /* Check if the VM is running */
+    snprintf(path, 256, "/vm/%s/state", paths[i]);
+    state = xs_read(xs_handle, XBT_NULL, path, &len);
+    if (state) {
+      if (!strncmp(state, "running", 7)) {
+        /* Read the domid */
+        snprintf(path, 256, "/xenmgr/vms/%s/domid", paths[i]);
+        value = xs_read(xs_handle, XBT_NULL, path, &len);
+        if (value == NULL)
+          continue;
+        domid = strtol(value, NULL, 10);
+        free(value);
+        slot = superbackend_find_slot(domid);
+        if (slot == -1) {
+          /* There's a new VM, let's create a backend for it */
+          spawn(domid);
+        }
+      }
+      free(state);
+    }
+  }
+  free(paths);
+}
+
 int superxenstore_init(void)
 {
   /* Init XenStore */
@@ -287,7 +385,7 @@ int superxenstore_init(void)
   }
   if (xs_handle == NULL) {
     xd_log(LOG_ERR, "Failed to connect to xenstore");
-    return 1;
+    return -1;
   }
 
   if (xs_dom0path == NULL) {
@@ -295,10 +393,12 @@ int superxenstore_init(void)
   }
   if (xs_dom0path == NULL) {
     xd_log(LOG_ERR, "Could not get domain 0 path from XenStore");
-    return 1;
+    return -1;
   }
 
-  return 0;
+  xs_watch(xs_handle, "/vm", "/vm");
+
+  return xs_fileno(xs_handle);
 }
 
 void superxenstore_close(void)
