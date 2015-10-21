@@ -64,8 +64,9 @@ static bool all_pending(struct superhid_backend *superback)
     if (dev != NULL) {
       while (dev->pendinghead != dev->pendingtail && dev->pendings[dev->pendinghead] == -1)
         dev->pendinghead = (dev->pendinghead + 1) % 32;
-      if (dev->pendinghead == dev->pendingtail)
+      if (dev->pendinghead == dev->pendingtail) {
         return false;
+      }
     }
   }
 
@@ -74,14 +75,27 @@ static bool all_pending(struct superhid_backend *superback)
 
 static void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
 {
-  int i;
+  int i, type, id;
   struct superhid_device *dev;
 
   for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
     dev = superback->devices[i];
-    if (dev != NULL && dev->pendinghead != dev->pendingtail)
-      send_report(fd, report, superback->devices[i]);
+    if (dev != NULL && dev->pendinghead != dev->pendingtail) {
+      /* This device is pending, send the report if it matches */
+      type = dev->type;
+      id = report->report_id;
+      if ( type == SUPERHID_TYPE_MULTI                                    ||
+          (type == SUPERHID_TYPE_MOUSE     && id == REPORT_ID_MOUSE)      ||
+          (type == SUPERHID_TYPE_DIGITIZER && id == REPORT_ID_MULTITOUCH) ||
+          (type == SUPERHID_TYPE_TABLET    && id == REPORT_ID_TABLET)     ||
+          (type == SUPERHID_TYPE_KEYBOARD  && id == REPORT_ID_KEYBOARD)) {
+        send_report(fd, report, superback->devices[i]);
+        return;
+      }
+    }
   }
+
+  xd_log(LOG_ERR, "COULD NOT SEND REPORT %d\n", report->report_id);
 }
 
 void input_handler(int fd, short event, void *priv)

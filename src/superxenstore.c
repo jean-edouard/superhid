@@ -279,7 +279,7 @@ superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   return -1;
 }
 
-static void spawn(int domid)
+static void spawn(int domid, enum superhid_type type)
 {
   usbinfo_t ui;
   dominfo_t di;
@@ -288,12 +288,6 @@ static void spawn(int domid)
   struct superhid_input_event *input_event;
   int slot;
 
-  slot = superbackend_find_free_slot();
-  if (slot == -1) {
-    xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n");
-    return;
-  }
-
   /* Fill the domain info */
   ret = superxenstore_get_dominfo(domid, &di);
   if (ret != 0) {
@@ -301,30 +295,41 @@ static void spawn(int domid)
     return;
   }
 
+  slot = superbackend_find_slot(domid);
+  if (slot == -1) {
+    /* There's no backend for this domain yet, let's create one */
+    slot = superbackend_find_free_slot();
+    if (slot == -1) {
+      xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n");
+      return;
+    }
+
+    /* Create the backend */
+    for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
+      superbacks[slot].devices[i] = NULL;
+    /* printf("SET %d %s %d TO SLOT %d\n", di.di_domid, di.di_name, di.di_dompath, slot); */
+    superbacks[slot].di = di;
+    superbackend_add(di, &superbacks[slot]);
+
+    /* Grab input events for the domain */
+    superfd = superplugin_init(domid);
+
+    input_event = malloc(sizeof(*input_event));
+    input_event->domid = domid;
+    event_set(&input_event->event, superfd, EV_READ | EV_PERSIST,
+              input_handler, input_event);
+    event_add(&input_event->event, NULL);
+  }
+
   /* Fill the device info */
-  ui.usb_virtid = 1;
+  ui.usb_virtid = type;
   ui.usb_bus = 1;
-  ui.usb_device = 1;
+  ui.usb_device = type;
   ui.usb_vendor = SUPERHID_VENDOR;
   ui.usb_product = SUPERHID_DEVICE;
 
-  /* Create the backend */
-  for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
-    superbacks[slot].devices[i] = NULL;
-  superbacks[slot].di = di;
-  superbackend_add(di, &superbacks[slot]);
-
   /* Create a new device on xenstore */
   superxenstore_create_usb(&di, &ui);
-
-  /* Grab input events for the domain */
-  superfd = superplugin_init(di.di_domid);
-
-  input_event = malloc(sizeof(*input_event));
-  input_event->domid = domid;
-  event_set(&input_event->event, superfd, EV_READ | EV_PERSIST,
-            input_handler, input_event);
-  event_add(&input_event->event, NULL);
 }
 
 void superxenstore_handler(void)
@@ -353,6 +358,11 @@ void superxenstore_handler(void)
       continue;
     } else
       free(type);
+    /* Check if the VM wants a multiple device */
+    /* snprintf(path, 256, "/xenmgr/vms/%s/superhid", paths[i]); */
+    /* type = xs_read(xs_handle, XBT_NULL, path, &len); */
+    /* if (type == NULL || *type == 'n' || *type == '0') */
+    /*   continue; */
     /* Check if the VM is running */
     snprintf(path, 256, "/vm/%s/state", paths[i]);
     state = xs_read(xs_handle, XBT_NULL, path, &len);
@@ -368,7 +378,14 @@ void superxenstore_handler(void)
         slot = superbackend_find_slot(domid);
         if (slot == -1) {
           /* There's a new VM, let's create a backend for it */
-          spawn(domid);
+          /* if (*type == 'm') { */
+          /*   spawn(domid, SUPERHID_TYPE_MULTI); */
+          /* } else { */
+          spawn(domid, SUPERHID_TYPE_MOUSE);
+          spawn(domid, SUPERHID_TYPE_DIGITIZER);
+          spawn(domid, SUPERHID_TYPE_TABLET);
+          spawn(domid, SUPERHID_TYPE_KEYBOARD);
+          /* } */
         }
       }
       free(state);

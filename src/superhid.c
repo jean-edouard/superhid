@@ -189,6 +189,46 @@ struct hid_report_desc superhid_desc = {
   }
 };
 
+struct hid_report_desc superhid_mouse_desc = {
+  .subclass = 0, /* No subclass */
+  .protocol = 0,
+  .report_length = SUPERHID_REPORT_LENGTH,
+  .report_desc_length = MOUSE_LENGTH,
+  .report_desc = {
+    MOUSE
+  }
+};
+
+struct hid_report_desc superhid_digitizer_desc = {
+  .subclass = 0, /* No subclass */
+  .protocol = 0,
+  .report_length = SUPERHID_REPORT_LENGTH,
+  .report_desc_length = DIGITIZER_LENGTH,
+  .report_desc = {
+    DIGITIZER
+  }
+};
+
+struct hid_report_desc superhid_tablet_desc = {
+  .subclass = 0, /* No subclass */
+  .protocol = 0,
+  .report_length = SUPERHID_REPORT_LENGTH,
+  .report_desc_length = TABLET_LENGTH,
+  .report_desc = {
+    TABLET
+  }
+};
+
+struct hid_report_desc superhid_keyboard_desc = {
+  .subclass = 0, /* No subclass */
+  .protocol = 0,
+  .report_length = SUPERHID_REPORT_LENGTH,
+  .report_desc_length = KEYBOARD_LENGTH,
+  .report_desc = {
+    KEYBOARD
+  }
+};
+
 static struct usb_device_descriptor device_desc = {
   .bLength = USB_DT_DEVICE_SIZE,
   .bDescriptorType = USB_DT_DEVICE,
@@ -271,6 +311,46 @@ static struct hid_descriptor hid_desc = {
   /* .bAddDescriptorLength = DYNAMIC, */
 };
 
+static struct hid_descriptor hid_desc_mouse = {
+  .bLength = sizeof(struct hid_descriptor),
+  .bDescriptorType = HID_DT_HID,
+  .bcdHID = 0x0111,
+  .bCountryCode = 0x00,
+  .bNumDescriptors = 0x1,
+  .bAddDescriptorType = HID_DT_REPORT,
+  /* .bAddDescriptorLength = DYNAMIC, */
+};
+
+static struct hid_descriptor hid_desc_digitizer = {
+  .bLength = sizeof(struct hid_descriptor),
+  .bDescriptorType = HID_DT_HID,
+  .bcdHID = 0x0111,
+  .bCountryCode = 0x00,
+  .bNumDescriptors = 0x1,
+  .bAddDescriptorType = HID_DT_REPORT,
+  /* .bAddDescriptorLength = DYNAMIC, */
+};
+
+static struct hid_descriptor hid_desc_tablet = {
+  .bLength = sizeof(struct hid_descriptor),
+  .bDescriptorType = HID_DT_HID,
+  .bcdHID = 0x0111,
+  .bCountryCode = 0x00,
+  .bNumDescriptors = 0x1,
+  .bAddDescriptorType = HID_DT_REPORT,
+  /* .bAddDescriptorLength = DYNAMIC, */
+};
+
+static struct hid_descriptor hid_desc_keyboard = {
+  .bLength = sizeof(struct hid_descriptor),
+  .bDescriptorType = HID_DT_HID,
+  .bcdHID = 0x0111,
+  .bCountryCode = 0x00,
+  .bNumDescriptors = 0x1,
+  .bAddDescriptorType = HID_DT_REPORT,
+  /* .bAddDescriptorLength = DYNAMIC, */
+};
+
 static struct usb_endpoint_descriptor endpoint_in_desc = {
   .bLength		= USB_DT_ENDPOINT_SIZE,
   .bDescriptorType	= USB_DT_ENDPOINT,
@@ -294,11 +374,15 @@ void superhid_init(void)
 {
   /* DYNAMIC inits */
   hid_desc.wAddDescriptorLength = superhid_desc.report_desc_length;
+  hid_desc_mouse.wAddDescriptorLength = superhid_mouse_desc.report_desc_length;
+  hid_desc_digitizer.wAddDescriptorLength = superhid_digitizer_desc.report_desc_length;
+  hid_desc_tablet.wAddDescriptorLength = superhid_tablet_desc.report_desc_length;
+  hid_desc_keyboard.wAddDescriptorLength = superhid_keyboard_desc.report_desc_length;
   endpoint_in_desc.wMaxPacketSize = superhid_desc.report_length;
   /* endpoint_out_desc.wMaxPacketSize = superhid_desc.report_length; */
 }
 
-int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
+int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type)
 {
   __u16 value, length;
   struct feature_report feature;
@@ -411,8 +495,28 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
         printf("skipping hid\n");
         goto skipshit;
       }
-      memcpy(buf + total, &hid_desc, sizeof(hid_desc));
-      total += sizeof(hid_desc);
+      switch (type) {
+      case SUPERHID_TYPE_MULTI:
+        memcpy(buf + total, &hid_desc, sizeof(hid_desc));
+        total += sizeof(hid_desc);
+        break;
+      case SUPERHID_TYPE_MOUSE:
+        memcpy(buf + total, &hid_desc_mouse, sizeof(hid_desc_mouse));
+        total += sizeof(hid_desc_mouse);
+        break;
+      case SUPERHID_TYPE_DIGITIZER:
+        memcpy(buf + total, &hid_desc_digitizer, sizeof(hid_desc_digitizer));
+        total += sizeof(hid_desc_digitizer);
+        break;
+      case SUPERHID_TYPE_TABLET:
+        memcpy(buf + total, &hid_desc_tablet, sizeof(hid_desc_tablet));
+        total += sizeof(hid_desc_tablet);
+        break;
+      case SUPERHID_TYPE_KEYBOARD:
+        memcpy(buf + total, &hid_desc_keyboard, sizeof(hid_desc_keyboard));
+        total += sizeof(hid_desc_keyboard);
+        break;
+      }
       printf("%d ", total);
       if (total > length) {
         printf("skipping endpoint 1\n");
@@ -493,9 +597,33 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf)
       goto respond;
       break;
     case HID_DT_REPORT:
-      if (superhid_desc.report_desc_length < length)
-        length = superhid_desc.report_desc_length;
-      memcpy(buf, superhid_desc.report_desc, length);
+      switch (type) {
+      case SUPERHID_TYPE_MULTI:
+        if (superhid_desc.report_desc_length < length)
+          length = superhid_desc.report_desc_length;
+        memcpy(buf, superhid_desc.report_desc, length);
+        break;
+      case SUPERHID_TYPE_MOUSE:
+        if (superhid_mouse_desc.report_desc_length < length)
+          length = superhid_mouse_desc.report_desc_length;
+        memcpy(buf, superhid_mouse_desc.report_desc, length);
+        break;
+      case SUPERHID_TYPE_DIGITIZER:
+        if (superhid_digitizer_desc.report_desc_length < length)
+          length = superhid_digitizer_desc.report_desc_length;
+        memcpy(buf, superhid_digitizer_desc.report_desc, length);
+        break;
+      case SUPERHID_TYPE_TABLET:
+        if (superhid_tablet_desc.report_desc_length < length)
+          length = superhid_tablet_desc.report_desc_length;
+        memcpy(buf, superhid_tablet_desc.report_desc, length);
+        break;
+      case SUPERHID_TYPE_KEYBOARD:
+        if (superhid_keyboard_desc.report_desc_length < length)
+          length = superhid_keyboard_desc.report_desc_length;
+        memcpy(buf, superhid_keyboard_desc.report_desc, length);
+        break;
+      }
       goto respond;
       break;
 

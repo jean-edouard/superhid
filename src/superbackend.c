@@ -75,9 +75,9 @@ void consume_requests(struct superhid_device *dev)
                                        req.u.gref, PROT_READ | PROT_WRITE);
       }
       if (buf)
-        responded = superhid_setup(&setup, buf + req.offset);
+        responded = superhid_setup(&setup, buf + req.offset, dev->type);
       else
-        responded = superhid_setup(&setup, NULL);
+        responded = superhid_setup(&setup, NULL, dev->type);
       if (responded >= 0) {
         rsp.id            = req.id;
         rsp.actual_length = responded;
@@ -94,7 +94,7 @@ void consume_requests(struct superhid_device *dev)
       superbackend_send(dev, &rsp);
       break;
     case USBIF_T_INT: /* Interrupt request. Pend it. */
-      xd_log(LOG_DEBUG, "pendings[%d]=%d\n", dev->pendingtail, req.id);
+      xd_log(LOG_DEBUG, "%d: pendings[%d]=%d", dev->devid, dev->pendingtail, req.id);
       dev->pendings[dev->pendingtail] = req.id;
       dev->pendingrefs[dev->pendingtail] = req.u.gref[0];
       dev->pendingoffsets[dev->pendingtail] = req.offset;
@@ -179,6 +179,7 @@ superback_alloc(xen_backend_t backend, int devid, void *priv)
   dev->backend = backend;
   dev->evtfd = -1;
   dev->superback = superback;
+  dev->type = devid;
 
   superback->devices[devid] = dev;
 
@@ -242,10 +243,14 @@ superback_disconnect(xen_device_t xendev)
 {
   struct superhid_device *dev = xendev;
 
-  /* TODO: something */
-  (void)dev;
+  /* Windows calls this at device creation for some reason. Let's
+   * bail if the device is not fully created... */
+  if (dev != NULL && dev->priv != NULL) {
+    xd_log(LOG_INFO, "disconnect %d\n", dev->devid);
+    superbacks->devices[dev->devid] = NULL;
+    free(dev);
+  }
 
-  printf("disconnect\n");
 }
 
 static void superback_backend_changed(xen_device_t xendev,

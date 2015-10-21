@@ -108,6 +108,15 @@ typedef struct dominfo
   char *di_dompath;
 } dominfo_t;
 
+enum superhid_type
+{
+  SUPERHID_TYPE_MULTI = 1,
+  SUPERHID_TYPE_MOUSE,
+  SUPERHID_TYPE_DIGITIZER,
+  SUPERHID_TYPE_TABLET,
+  SUPERHID_TYPE_KEYBOARD
+};
+
 struct superhid_device
 {
   unsigned char            devid;
@@ -124,6 +133,7 @@ struct superhid_device
   char                     pendinghead;
   char                     pendingtail;
   struct event             event;
+  enum superhid_type       type;
 };
 
 struct superhid_backend
@@ -248,7 +258,7 @@ xc_gnttab *xcg_handle;
 struct superhid_backend superbacks[SUPERHID_MAX_BACKENDS];
 
 void superhid_init(void);
-int superhid_setup(struct usb_ctrlrequest *setup, void *buf);
+int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type);
 int superxenstore_init(void);
 int superxenstore_get_dominfo(int domid, dominfo_t *di);
 int superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
