@@ -314,10 +314,14 @@ static void spawn(int domid, enum superhid_type type)
     /* Grab input events for the domain */
     superfd = superplugin_init(&superbacks[slot]);
 
-    input_event = &superbacks[slot].input_event;
-    event_set(input_event, superfd, EV_READ | EV_PERSIST,
-              input_handler, &superbacks[slot]);
-    event_add(input_event, NULL);
+    if (superfd >= 0) {
+      input_event = &superbacks[slot].input_event;
+      event_set(input_event, superfd, EV_READ | EV_PERSIST,
+                input_handler, &superbacks[slot]);
+      event_add(input_event, NULL);
+    } else {
+      xd_log(LOG_ERR, "Can't grab input events for %d", domid);
+    }
   }
 
   /* Fill the device info */

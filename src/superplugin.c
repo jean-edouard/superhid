@@ -386,8 +386,7 @@ int superplugin_callback(struct superhid_backend *superback, int fd, struct supe
   b = buf->buffer;
 
   if (buf->bytes_remaining < 0)
-    sleep(1);
-  printf("JEDJEDJED %d %d\n", buf->position, buf->bytes_remaining);
+    return buf->bytes_remaining;
   if (buf->position != 0 && buf->bytes_remaining != 0)
     memmove(b, b + buf->position, buf->bytes_remaining);
   buf->position = 0;
@@ -397,7 +396,6 @@ int superplugin_callback(struct superhid_backend *superback, int fd, struct supe
   if (n < 0) {
     xd_log(LOG_ERR, "FAILED TO READ THE FD\n");
     perror("recv");
-    sleep(10);
     return buf->bytes_remaining;
   }
 
@@ -442,6 +440,12 @@ int superplugin_init(struct superhid_backend *superback)
   char str[100];
   pthread_t output_thread_var;
   int domid;
+  static bool dead = false;
+
+  /* input_server only support one plugin at a time!!??!! :( */
+  if (dead)
+    return -1;
+  dead = true;
 
   domid = superback->di.di_domid;
 
