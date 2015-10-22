@@ -117,7 +117,7 @@ void consume_requests(struct superhid_device *dev)
     case USBIF_T_GET_SPEED: /* (internal) Speed request, say HIGH (USB2) */
       rsp.id            = req.id;
       rsp.actual_length = 0;
-      rsp.data          = USBIF_S_FULL;
+      rsp.data          = USBIF_S_HIGH;
       rsp.status        = USBIF_RSP_OKAY;
       superbackend_send(dev, &rsp);
       break;
@@ -246,11 +246,11 @@ superback_disconnect(xen_device_t xendev)
   /* Windows calls this at device creation for some reason. Let's
    * bail if the device is not fully created... */
   if (dev != NULL && dev->priv != NULL) {
+    /* TODO: DISCONNECT AND CLEANUP XENSTORE!! */
     xd_log(LOG_INFO, "disconnect %d\n", dev->devid);
     superbacks->devices[dev->devid] = NULL;
     free(dev);
   }
-
 }
 
 static void superback_backend_changed(xen_device_t xendev,

@@ -136,16 +136,24 @@ struct superhid_device
   enum superhid_type       type;
 };
 
+#define buffersize              (EVENT_SIZE*20)
+
+struct buffer_t
+{
+  char buffer[buffersize];
+  int bytes_remaining;
+  int position;
+  int s;
+  int copy;
+  int block;
+};
+
 struct superhid_backend
 {
   struct superhid_device *devices[BACKEND_DEVICE_MAX];
   dominfo_t di;
-};
-
-struct superhid_input_event
-{
-  struct event event;
-  int domid;
+  struct buffer_t buffers;
+  struct event input_event;
 };
 
 typedef struct usbinfo
@@ -213,7 +221,7 @@ struct superhid_report_tablet
   uint8_t  placeholder:5;
   uint16_t x;             /* Absolute position on the X axis */
   uint16_t y;             /* Absolute position on the Y axis */
-  int8_t   wheel;         /* Vertical scroll wheel */
+  int8_t   wheel;         /* Vertical scroll wheel. NOT USED */
   uint8_t  pad[SUPERHID_REPORT_LENGTH - 7];
 } __attribute__ ((__packed__));
 
@@ -269,8 +277,8 @@ xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback)
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
 int superbackend_find_slot(int domid);
 int superbackend_find_free_slot(void);
-int superplugin_callback(int fd, struct superhid_finger *finger, struct superhid_report *report);
-int superplugin_init(int domid);
+int superplugin_callback(struct superhid_backend *superback, int fd, struct superhid_finger *finger, struct superhid_report *report);
+int superplugin_init(struct superhid_backend *superback);
 void input_handler(int fd, short event, void *priv);
 
 #endif 	    /* !PROJECT_H_ */

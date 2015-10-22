@@ -35,8 +35,6 @@
 #define SOCK_PATH               "/var/run/input_socket"
 #define MAGIC                   0xAD9CBCE9
 
-#define buffersize              (EVENT_SIZE*20)
-
 /* Shouldn't that be defined somewhere already? */
 #define ABS_MT_SLOT             0x2f
 #define EV_DEV                  0x06
@@ -61,18 +59,6 @@ struct event_record
   uint16_t icode;
   uint32_t ivalue;
 } __attribute__ ((__packed__));
-
-struct buffer_t
-{
-  char buffer[buffersize];
-  unsigned int bytes_remaining;
-  int position;
-  int s;
-  int copy;
-  int block;
-} buffers;
-
-struct event recv_event;
 
 /* Some OSes swap the x,y coordinates for some reason... */
 static uint16_t swap_bytes(uint16_t n)
@@ -371,6 +357,7 @@ static struct event_record *findnext(struct buffer_t *b)
          (r = (struct event_record *) &b->buffer[b->position]) && r->magic != MAGIC)
   {
     printf("SKIPPED!\n");
+    sleep(1);
     b->bytes_remaining--;
     b->position++;
   }
@@ -388,17 +375,31 @@ static struct event_record *findnext(struct buffer_t *b)
     return NULL;
 }
 
-int superplugin_callback(int fd, struct superhid_finger *finger, struct superhid_report *report)
+int superplugin_callback(struct superhid_backend *superback, int fd, struct superhid_finger *finger, struct superhid_report *report)
 {
   int n = 0;
-  struct buffer_t *buf = &buffers;
-  char *b = buf->buffer;
+  struct buffer_t *buf;
+  char *b;
   size_t nbytes = 0;
 
-  memmove(b, &b[buf->position], buf->bytes_remaining);
+  buf = &superback->buffers;
+  b = buf->buffer;
+
+  if (buf->bytes_remaining < 0)
+    sleep(1);
+  printf("JEDJEDJED %d %d\n", buf->position, buf->bytes_remaining);
+  if (buf->position != 0 && buf->bytes_remaining != 0)
+    memmove(b, b + buf->position, buf->bytes_remaining);
   buf->position = 0;
   if (buf->bytes_remaining < EVENT_SIZE)
     n = recv(fd, &b[buf->bytes_remaining], buffersize - buf->bytes_remaining, 0);
+
+  if (n < 0) {
+    xd_log(LOG_ERR, "FAILED TO READ THE FD\n");
+    perror("recv");
+    sleep(10);
+    return buf->bytes_remaining;
+  }
 
   if (n + buf->bytes_remaining >= EVENT_SIZE)
   {
@@ -434,12 +435,15 @@ static void suck(int s, int d)
   }
 }
 
-int superplugin_init(int domid)
+int superplugin_init(struct superhid_backend *superback)
 {
   int s, t, len;
   struct sockaddr_un remote;
   char str[100];
   pthread_t output_thread_var;
+  int domid;
+
+  domid = superback->di.di_domid;
 
   /* Trying to connect to input_server to get events */
   if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
@@ -451,7 +455,7 @@ int superplugin_init(int domid)
   printf("Trying to grab events for domid %d...\n", domid);
 
   remote.sun_family = AF_UNIX;
-  strcpy (remote.sun_path, SOCK_PATH);
+  strcpy(remote.sun_path, SOCK_PATH);
   len = strlen(remote.sun_path) + sizeof(remote.sun_family);
   if (connect(s, (struct sockaddr *) &remote, len) == -1)
   {
@@ -461,11 +465,11 @@ int superplugin_init(int domid)
 
   printf("Grabbed.\n");
 
-  buffers.bytes_remaining = 0;
-  buffers.position = 0;
-  buffers.copy = 0;
-  buffers.block = 0;
-  buffers.s = s;
+  superback->buffers.bytes_remaining = 0;
+  superback->buffers.position = 0;
+  superback->buffers.copy = 0;
+  superback->buffers.block = 0;
+  superback->buffers.s = s;
 
   suck(s, domid);
 

@@ -285,7 +285,7 @@ static void spawn(int domid, enum superhid_type type)
   dominfo_t di;
   int superfd;
   int i, ret;
-  struct superhid_input_event *input_event;
+  struct event *input_event;
   int slot;
 
   /* Fill the domain info */
@@ -312,13 +312,12 @@ static void spawn(int domid, enum superhid_type type)
     superbackend_add(di, &superbacks[slot]);
 
     /* Grab input events for the domain */
-    superfd = superplugin_init(domid);
+    superfd = superplugin_init(&superbacks[slot]);
 
-    input_event = malloc(sizeof(*input_event));
-    input_event->domid = domid;
-    event_set(&input_event->event, superfd, EV_READ | EV_PERSIST,
-              input_handler, input_event);
-    event_add(&input_event->event, NULL);
+    input_event = &superbacks[slot].input_event;
+    event_set(input_event, superfd, EV_READ | EV_PERSIST,
+              input_handler, &superbacks[slot]);
+    event_add(input_event, NULL);
   }
 
   /* Fill the device info */

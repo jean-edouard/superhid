@@ -100,32 +100,27 @@ static void send_report_to_frontends(int fd, struct superhid_report *report, str
 
 void input_handler(int fd, short event, void *priv)
 {
-  struct superhid_input_event *input_event = priv;
+  struct superhid_backend *superback = priv;
   struct superhid_report_multitouch report = { 0 };
   struct superhid_report custom_report = { 0 };
   struct superhid_finger *finger;
   int remaining = EVENT_SIZE;
   int sents = 0;
-  int domid, slot;
+  int domid;
 
-  domid = input_event->domid;
-  slot = superbackend_find_slot(domid);
-  if (slot == -1) {
-    xd_log(LOG_ERR, "Could not find a backend for domid %d", domid);
-    return;
-  }
+  domid = superback->di.di_domid;
 
   /* We send a maximum of 2 packets, because that's usually how
    * many pending INT requests we have. */
-  while (sents < 2 && remaining >= EVENT_SIZE && all_pending(&superbacks[slot]))
+  while (sents < 2 && remaining >= EVENT_SIZE && all_pending(superback))
   {
     finger = &report.fingers[report.count];
     /* I don't think the finger ID can ever be 0xF. Use that to know
      * if superplugin_callback succeeded */
     finger->finger_id = 0xF;
-    remaining = superplugin_callback(fd, finger, &custom_report);
+    remaining = superplugin_callback(superback, fd, finger, &custom_report);
     if (custom_report.report_id != 0) {
-      send_report_to_frontends(fd, &custom_report, &superbacks[slot]);
+      send_report_to_frontends(fd, &custom_report, superback);
       memset(&custom_report, 0, sizeof(report));
       sents++;
       continue;
@@ -136,7 +131,7 @@ void input_handler(int fd, short event, void *priv)
     }
     if (report.count == SUPERHID_FINGER_WIDTH) {
       /* The report is full, let's send it and start a new one */
-      send_report_to_frontends(fd, (struct superhid_report *)&report, &superbacks[slot]);
+      send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
       memset(&report, 0, sizeof(report));
       sents++;
     }
@@ -144,13 +139,13 @@ void input_handler(int fd, short event, void *priv)
 
   if (report.count > 0) {
     /* The loop ended on a partial report, we need to send it */
-    send_report_to_frontends(fd, (struct superhid_report *)&report, &superbacks[slot]);
+    send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
   }
 
   if (sents == 2 && remaining >= EVENT_SIZE) {
     /* We sent 2 packets and the input buffer still has at least one
      * event, we need to get rescheduled even if no more input comes */
-    event_active(&input_event->event, event, 0);
+    event_active(&superback->input_event, event, 0);
   }
 }
 
