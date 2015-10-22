@@ -242,14 +242,50 @@ static void
 superback_disconnect(xen_device_t xendev)
 {
   struct superhid_device *dev = xendev;
+  usbinfo_t ui;
+  int i;
+  struct superhid_backend *kill = NULL;
 
   /* Windows calls this at device creation for some reason. Let's
    * bail if the device is not fully created... */
-  if (dev != NULL && dev->priv != NULL) {
-    /* TODO: DISCONNECT AND CLEANUP XENSTORE!! */
+  /* Also this function seems to get called with bogus values after a
+   * backend got killed... */
+  if (dev != NULL && dev->priv != NULL && dev->devid > 0 && dev->devid < 6) {
     xd_log(LOG_INFO, "disconnect %d\n", dev->devid);
-    superbacks->devices[dev->devid] = NULL;
+    event_del(&dev->event);
+    backend_unbind_evtchn(dev->backend, dev->devid);
+    ui.usb_virtid = dev->type;
+    ui.usb_bus = 1;
+    ui.usb_device = dev->type;
+    ui.usb_vendor = SUPERHID_VENDOR;
+    ui.usb_product = SUPERHID_DEVICE;
+    superxenstore_destroy_usb(&dev->superback->di, &ui);
+    kill = dev->superback;
+    for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
+      if (dev->superback->devices[i] == dev)
+        dev->superback->devices[i] = NULL;
+      if (dev->superback->devices[i] != NULL)
+        kill = NULL;
+    }
+    /* This should really be a call to backend_free_device() */
     free(dev);
+  }
+
+  if (kill != NULL) {
+    /* No device use that backend anymore, kill it */
+    xd_log(LOG_INFO, "KILLING THE BACKEND FOR DOMID %d", kill->di.di_domid);
+    /* This will call this function will all the devices it thinks
+     * are still alive... We need a backend_free_device() */
+    /* backend_release(kill->backend); */
+    if (kill->di.di_domid == input_grabber) {
+      close(kill->buffers.s);
+      input_grabber = -1;
+      xd_log(LOG_INFO, "DOMID %d no longer holds the input", kill->di.di_domid);
+      /* HACK: Let the VM change to a non-"running" state to make sure we
+       * don't re-grab the input... */
+      sleep(5);
+    }
+    memset(kill, 0, sizeof(struct superhid_backend));
   }
 }
 
@@ -281,10 +317,13 @@ superback_free(xen_device_t xendev)
 {
   struct superhid_device *dev = xendev;
 
-  /* printf("free %p\n", xendev); */
-  superback_disconnect(xendev);
-  dev->superback->devices[dev->devid] = NULL;
-  free(dev);
+  /* This function seems to get called with bogus values on shutdown */
+  if (dev->devid > 0 && dev->devid < 6) {
+    printf("free %d\n", dev->devid);
+    superback_disconnect(xendev);
+    dev->superback->devices[dev->devid] = NULL;
+    free(dev);
+  }
 }
 
 static struct xen_backend_ops superback_ops = {
@@ -314,16 +353,14 @@ int superbackend_init(void)
 
 xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback)
 {
-  xen_backend_t backend;
-
-  backend = backend_register(SUPERHID_NAME, di.di_domid, &superback_ops, superback);
-  if (!backend)
+  superback->backend = backend_register(SUPERHID_NAME, di.di_domid, &superback_ops, superback);
+  if (!superback->backend)
   {
     xd_log(LOG_ERR, "Failed to register as a backend for domid %d", di.di_domid);
     return NULL;
   }
 
-  return backend;
+  return superback->backend;
 }
 
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp)

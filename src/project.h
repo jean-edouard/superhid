@@ -108,6 +108,15 @@ typedef struct dominfo
   char *di_dompath;
 } dominfo_t;
 
+typedef struct usbinfo
+{
+  int usb_virtid;
+  int usb_bus;              /**< USB bus in the physical machine */
+  int usb_device;           /**< USB device in the physical machine */
+  int usb_vendor;
+  int usb_product;
+} usbinfo_t;
+
 enum superhid_type
 {
   SUPERHID_TYPE_MULTI = 1,
@@ -150,20 +159,12 @@ struct buffer_t
 
 struct superhid_backend
 {
+  xen_backend_t backend;
   struct superhid_device *devices[BACKEND_DEVICE_MAX];
   dominfo_t di;
   struct buffer_t buffers;
   struct event input_event;
 };
-
-typedef struct usbinfo
-{
-  int usb_virtid;
-  int usb_bus;              /**< USB bus in the physical machine */
-  int usb_device;           /**< USB device in the physical machine */
-  int usb_vendor;
-  int usb_product;
-} usbinfo_t;
 
 struct hid_descriptor {
   __u8   bLength;
@@ -264,12 +265,14 @@ struct superhid_report_mouse
 
 xc_gnttab *xcg_handle;
 struct superhid_backend superbacks[SUPERHID_MAX_BACKENDS];
+int input_grabber;
 
 void superhid_init(void);
 int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type);
 int superxenstore_init(void);
 int superxenstore_get_dominfo(int domid, dominfo_t *di);
 int superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
+int superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp);
 void superxenstore_handler(void);
 void superxenstore_close(void);
 int superbackend_init(void);

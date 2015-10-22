@@ -440,14 +440,13 @@ int superplugin_init(struct superhid_backend *superback)
   char str[100];
   pthread_t output_thread_var;
   int domid;
-  static bool dead = false;
-
-  /* input_server only support one plugin at a time!!??!! :( */
-  if (dead)
-    return -1;
-  dead = true;
 
   domid = superback->di.di_domid;
+
+  /* input_server only support one plugin at a time!!??!! :( */
+  if (input_grabber != -1)
+    return -1;
+  input_grabber = domid;
 
   /* Trying to connect to input_server to get events */
   if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)

@@ -190,6 +190,8 @@ int main(int argc, char **argv)
   /* Initialize the backend */
   xs_back_fd = superbackend_init();
 
+  input_grabber = -1;
+
   event_init();
 
   event_set(&xs_event, xs_fd, EV_READ | EV_PERSIST,
