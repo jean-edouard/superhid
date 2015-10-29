@@ -2,9 +2,10 @@ language: c
 
 before_install:
 - sudo apt-get update
-- sudo apt-get install -y build-essential autoconf automake libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libxenstore3.0 libevent-dev
+- sudo apt-get install -y build-essential autoconf automake libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libevent-dev
 - echo "deb http://security.ubuntu.com/ubuntu trusty-security main" | sudo tee --append /etc/apt/sources.list
 - sudo apt-get update
+- sudo apt-get install -y libxen-4.4
 - sudo apt-get install -y libxen-dev
 - git clone https://github.com/OpenXT/v4v.git
 - sudo cp v4v/v4v/linux/v4v_dev.h /usr/include/linux/
