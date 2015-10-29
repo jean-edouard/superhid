@@ -444,7 +444,7 @@ int superplugin_init(struct superhid_backend *superback)
   domid = superback->di.di_domid;
 
   /* input_server only support one plugin at a time!!??!! :( */
-  if (input_grabber != -1)
+  if (input_grabber >= 0 || input_grabber == -domid)
     return -1;
   input_grabber = domid;
 

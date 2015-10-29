@@ -279,11 +279,9 @@ superback_disconnect(xen_device_t xendev)
     /* backend_release(kill->backend); */
     if (kill->di.di_domid == input_grabber) {
       close(kill->buffers.s);
-      input_grabber = -1;
-      xd_log(LOG_INFO, "DOMID %d no longer holds the input", kill->di.di_domid);
-      /* HACK: Let the VM change to a non-"running" state to make sure we
-       * don't re-grab the input... */
-      sleep(5);
+      /* superxenstore will do that when the VM is gone */
+      input_grabber = -input_grabber;
+      /* xd_log(LOG_INFO, "DOMID %d no longer holds the input", kill->di.di_domid); */
     }
     memset(kill, 0, sizeof(struct superhid_backend));
   }

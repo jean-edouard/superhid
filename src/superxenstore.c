@@ -505,27 +505,28 @@ void superxenstore_handler(void)
     /* if (type == NULL || *type == 'n' || *type == '0') */
     /*   continue; */
     /* Check if the VM is running */
+    /* Read the domid */
+    snprintf(path, 256, "/xenmgr/vms/%s/domid", paths[i]);
+    value = xs_read(xs_handle, XBT_NULL, path, &len);
+    if (value == NULL)
+      continue;
+    domid = strtol(value, NULL, 10);
+    free(value);
+    /* Read the state */
     snprintf(path, 256, "/vm/%s/state", paths[i]);
     state = xs_read(xs_handle, XBT_NULL, path, &len);
     if (state) {
       if (!strncmp(state, "running", 7)) {
-        /* Read the domid */
-        snprintf(path, 256, "/xenmgr/vms/%s/domid", paths[i]);
-        value = xs_read(xs_handle, XBT_NULL, path, &len);
-        if (value == NULL)
-          continue;
-        domid = strtol(value, NULL, 10);
-        free(value);
         slot = superbackend_find_slot(domid);
         if (slot == -1) {
           /* There's a new VM, let's create a backend for it */
           /* if (*type == 'm') { */
-          /*   spawn(domid, SUPERHID_TYPE_MULTI); */
+            spawn(domid, SUPERHID_TYPE_MULTI);
           /* } else { */
-          spawn(domid, SUPERHID_TYPE_MOUSE);
-          spawn(domid, SUPERHID_TYPE_DIGITIZER);
-          spawn(domid, SUPERHID_TYPE_TABLET);
-          spawn(domid, SUPERHID_TYPE_KEYBOARD);
+          /* spawn(domid, SUPERHID_TYPE_MOUSE); */
+          /* spawn(domid, SUPERHID_TYPE_DIGITIZER); */
+          /* spawn(domid, SUPERHID_TYPE_TABLET); */
+          /* spawn(domid, SUPERHID_TYPE_KEYBOARD); */
           /* } */
         }
       }
