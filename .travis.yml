@@ -1,0 +1,31 @@
+language: c
+
+before_install:
+- sudo apt-get update
+- sudo apt-get install -y build-essential autoconf automake libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libevent-dev
+- echo "deb http://mirrors.kernel.org/ubuntu trusty main" | sudo tee --append /etc/apt/sources.list
+- echo "deb http://security.ubuntu.com/ubuntu trusty-security main" | sudo tee --append /etc/apt/sources.list
+- sudo apt-get update
+- sudo apt-get install -y libxen-dev
+- git clone https://github.com/OpenXT/v4v.git
+- sudo cp v4v/v4v/linux/v4v_dev.h /usr/include/linux/
+- sudo cp -r v4v/v4v/include/xen /usr/include/
+- cd v4v/libv4v
+- ./autogen.sh
+- ./configure
+- make
+- sudo make install
+- cd -
+- git clone https://github.com/OpenXT/libxenbackend.git
+- cd libxenbackend
+- autoreconf --verbose --install --force
+- ./configure
+- make
+- sudo make install
+- cd -
+
+script:
+- ./autogen.sh
+- ./configure
+- make
+- file src/superhid
