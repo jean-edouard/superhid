@@ -2,11 +2,13 @@ language: c
 
 before_install:
 - git clone https://github.com/OpenXT/v4v.git
+- sudo cp v4v/v4v/linux/v4v_dev.h /usr/include/linux/
 - cd v4v/libv4v
 - ./autogen.sh
 - ./configure
 - make
 - sudo make install
+- cd -
 
 install:
 - sudo apt-get update
