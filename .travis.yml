@@ -3,3 +3,5 @@ language: c
 compiler:
 - gcc
 
+script:
+- echo done
