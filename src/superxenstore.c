@@ -438,7 +438,7 @@ static void spawn(int domid, enum superhid_type type)
     /* There's no backend for this domain yet, let's create one */
     slot = superbackend_find_free_slot();
     if (slot == -1) {
-      xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n");
+      xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n", domid);
       return;
     }
 
