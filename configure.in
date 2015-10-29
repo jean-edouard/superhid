@@ -180,12 +180,6 @@ AC_SUBST(LIBXENSTORE_LIB)
 AC_ARG_WITH(idldir,AC_HELP_STRING([--with-idldir=PATH],[Path to dbus idl desription files]),
                 IDLDIR=$with_idldir,IDLDIR=/usr/share/idl)
 
-AC_SUBST(IDLDIR)
-AC_SUBST(RPCGEN_TEMPLATES)
-
-AC_CHECK_PROG(XC_RPCGEN,xc-rpcgen,xc-rpcgen)
-
-
 AC_OUTPUT([Makefile
 	   src/Makefile])
 
