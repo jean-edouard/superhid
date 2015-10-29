@@ -1,6 +1,10 @@
 language: c
 
 before_install:
+- echo "############### Install Ubuntu packages ###############"
+- sudo apt-get update
+- sudo apt-get install build-essential autoconf automake libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libxenstore3.0 libxen-dev libevent-dev
+- echo "############### Build and install libv4v ###############"
 - git clone https://github.com/OpenXT/v4v.git
 - sudo cp v4v/v4v/linux/v4v_dev.h /usr/include/linux/
 - sudo cp -r v4v/v4v/include/xen /usr/include/
@@ -10,10 +14,14 @@ before_install:
 - make
 - sudo make install
 - cd -
-
-install:
-- sudo apt-get update
-- sudo apt-get install build-essential libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libxenstore3.0
+- echo "############### Build and install libxenbackend ###############"
+- git clone https://github.com/OpenXT/libxenbackend.git
+- cd libxenbackend
+- autoreconf --verbose --install --force
+- ./configure
+- make
+- sudo make install
+- cd -
 
 before_script:
 - ./autogen.sh
