@@ -1,5 +1,13 @@
 language: c
 
+before install:
+- git clone https://github.com/OpenXT/v4v.git
+- cd v4v/libv4v
+- ./autogen.sh
+- ./configure
+- make
+- sudo make install
+
 install:
 - sudo apt-get update
 - sudo apt-get install build-essential libusb-dev libdbus-1-dev libdbus-glib-1-dev
