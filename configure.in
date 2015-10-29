@@ -90,36 +90,6 @@ fi
 AC_SUBST(LIBV4V_INC)
 AC_SUBST(LIBV4V_LIB)
 
-LIBXCDBUS_CONFIG=no
-AC_ARG_WITH(libxcdbus,
-        AC_HELP_STRING([--with-libxcdbus=PATH],[Path to libxcdbus-config]),
-                LIBXCDBUS_CONFIG=$with_libxcdbus,LIBXCDBUS_CONFIG=no)
-
-case "x$LIBXCDBUS_CONFIG" in
-        xno)
-                AC_PATH_PROG(LIBXCDBUS_CONFIG, libxcdbus-config, no)
-        ;;
-        x|xyes)
-                AC_PATH_PROG(LIBXCDBUS_CONFIG, libxcdbus-config, no)
-        ;;
-        *)
-        ;;
-esac
-
-if ! test -x $LIBXCDBUS_CONFIG; then
-  PKG_CHECK_MODULES([LIBXCDBUS], [libxcdbus])
-  LIBXCDBUS_INC="$LIBXCDBUS_CFLAGS"
-  LIBXCDBUS_LIB="$LIBXCDBUS_LIBS"
-else
- LIBXCDBUS_INC=`$LIBXCDBUS_CONFIG --cflags`
- LIBXCDBUS_LIB=`$LIBXCDBUS_CONFIG --libs`
-fi
-
-AC_SUBST(LIBXCDBUS_INC)
-AC_SUBST(LIBXCDBUS_LIB)
-
-
-
 
 AC_ARG_WITH(libexpat, 
         AC_HELP_STRING([--with-libexpat=PATH],[Path to prefix where where libexpat and xen were installed]), 

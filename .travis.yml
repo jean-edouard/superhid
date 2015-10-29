@@ -13,7 +13,7 @@ before_install:
 
 install:
 - sudo apt-get update
-- sudo apt-get install build-essential libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev
+- sudo apt-get install build-essential libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libxenstore3.0
 
 before_script:
 - ./autogen.sh
