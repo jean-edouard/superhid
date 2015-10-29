@@ -2,7 +2,7 @@ language: c
 
 install:
 - sudo apt-get update
-- sudo apt-get install build-essential libusb-0.1-4
+- sudo apt-get install build-essential libusb-dev
 
 before_script:
 - ./autogen.sh
