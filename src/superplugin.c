@@ -139,7 +139,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       fingers[i].finger_id = i;
 
   if (multitouch_dev == -42)
-    if (itype == EV_ABS && icode >= ABS_MT_SLOT && icode <= ABS_MT_TOOL_Y)
+    if (itype == EV_ABS && icode >= ABS_MT_SLOT && icode <= ABS_MAX)
       multitouch_dev = dev_set;
 
   switch (itype)

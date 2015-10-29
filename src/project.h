@@ -58,6 +58,7 @@
 #include <sys/int_types.h>
 #endif
 
+#include <inttypes.h>
 #include <event.h>
 #include <sys/mman.h>
 #include <syslog.h>
