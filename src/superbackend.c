@@ -21,8 +21,8 @@
 static void print_request(usbif_request_t *req)
 {
   xd_log(LOG_DEBUG, "***** GOT REQUEST *****");
-  xd_log(LOG_DEBUG, "id=%d", req->id);
-  xd_log(LOG_DEBUG, "setup=%X", req->setup);
+  xd_log(LOG_DEBUG, "id=%"PRIu64, req->id);
+  xd_log(LOG_DEBUG, "setup=%"PRIX64, req->setup);
   xd_log(LOG_DEBUG, "type=%X", req->type);
   xd_log(LOG_DEBUG, "endpoint=%d", req->endpoint);
   xd_log(LOG_DEBUG, "offset=%X", req->offset);
@@ -94,7 +94,7 @@ void consume_requests(struct superhid_device *dev)
       superbackend_send(dev, &rsp);
       break;
     case USBIF_T_INT: /* Interrupt request. Pend it. */
-      xd_log(LOG_DEBUG, "%d: pendings[%d]=%d", dev->devid, dev->pendingtail, req.id);
+      xd_log(LOG_DEBUG, "%d: pendings[%d]=%"PRIu64, dev->devid, dev->pendingtail, req.id);
       dev->pendings[dev->pendingtail] = req.id;
       dev->pendingrefs[dev->pendingtail] = req.u.gref[0];
       dev->pendingoffsets[dev->pendingtail] = req.offset;
@@ -132,7 +132,7 @@ void consume_requests(struct superhid_device *dev)
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
-        xd_log(LOG_DEBUG, "Failing to cancel %d", tocancel);
+        xd_log(LOG_DEBUG, "Failing to cancel %"PRIu64, tocancel);
         superbackend_send(dev, &rsp);
       } else {
         rsp.id            = tocancel;
@@ -143,7 +143,7 @@ void consume_requests(struct superhid_device *dev)
         dev->pendings[i] = -1;
         dev->pendingrefs[i] = -1;
         dev->pendingoffsets[i] = -1;
-        xd_log(LOG_DEBUG, "Cancelled %d", tocancel);
+        xd_log(LOG_DEBUG, "Cancelled %"PRIu64, tocancel);
         rsp.id = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;

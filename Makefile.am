@@ -17,6 +17,3 @@
 #
 
 SUBDIRS = src
-
-protos:
-	make -C src protos
