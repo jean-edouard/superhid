@@ -24,5 +24,8 @@ before_install:
 - sudo make install
 - cd -
 
-before_script:
+script:
 - ./autogen.sh
+- ./configure
+- make
+- file src/superhid
