@@ -29,4 +29,4 @@ superhid_SOURCES = ${PROTO_SRCS}
 
 # Add -lusb-1.0 for a decent usb lib
 # Add @LIBXCXENSTORE_LIBS@ for libxcxenstore
-superhid_LDADD = @LIBEXPAT_LIB@ @DBUS_LIBS@ @DBUS_GLIB_LIBS@ @LIBXCDBUS_LIBS@ @UDEV_LIBS@ -lusb -levent -lxenstore -lxenbackend -lxenctrl
+superhid_LDADD = @LIBEXPAT_LIB@ @DBUS_LIBS@ @DBUS_GLIB_LIBS@ @UDEV_LIBS@ -lusb -levent -lxenstore -lxenbackend -lxenctrl
