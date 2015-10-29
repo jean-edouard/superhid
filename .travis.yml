@@ -6,7 +6,6 @@ before_install:
 - echo "deb http://mirrors.kernel.org/ubuntu trusty main" | sudo tee --append /etc/apt/sources.list
 - echo "deb http://security.ubuntu.com/ubuntu trusty-security main" | sudo tee --append /etc/apt/sources.list
 - sudo apt-get update
-- sudo apt-get install -y libxen-4.4
 - sudo apt-get install -y libxen-dev
 - git clone https://github.com/OpenXT/v4v.git
 - sudo cp v4v/v4v/linux/v4v_dev.h /usr/include/linux/
