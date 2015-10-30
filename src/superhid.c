@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jed Lejosne <lejosnej@ainfosec.com>
+ * Copyright (c) 2015 Assured Information Security, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,6 +14,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+/**
+ * @file   superhid.c
+ * @author Jed Lejosne <lejosnej@ainfosec.com>
+ * @date   Fri Oct 30 11:12:11 2015
+ *
+ * @brief  SuperHID core
+ *
+ * This file defines the devices we support, and especially their HID
+ * descriptors. It handles "setup" (control) USB requests, as those
+ * are the ones requesting device information.
  */
 
 #include "project.h"
@@ -361,6 +373,7 @@ static struct usb_endpoint_descriptor endpoint_in_desc = {
   .bInterval		= 1,
 };
 
+/* Un-comment this if an OUT endpoint is needed */
 /* static struct usb_endpoint_descriptor endpoint_out_desc = { */
 /*   .bLength		= USB_DT_ENDPOINT_SIZE, */
 /*   .bDescriptorType	= USB_DT_ENDPOINT, */
@@ -370,6 +383,10 @@ static struct usb_endpoint_descriptor endpoint_in_desc = {
 /*   .bInterval		= 4, */
 /* }; */
 
+/**
+ * Must be called before the first superhid_setup(), to finish
+ * initializing the descriptors.
+ */
 void superhid_init(void)
 {
   /* DYNAMIC inits */
@@ -379,9 +396,19 @@ void superhid_init(void)
   hid_desc_tablet.wAddDescriptorLength = superhid_tablet_desc.report_desc_length;
   hid_desc_keyboard.wAddDescriptorLength = superhid_keyboard_desc.report_desc_length;
   endpoint_in_desc.wMaxPacketSize = superhid_desc.report_length;
+  /* Un-comment this if an OUT endpoint is needed */
   /* endpoint_out_desc.wMaxPacketSize = superhid_desc.report_length; */
 }
 
+/**
+ * Handle a setup (control) request
+ *
+ * @param setup The request
+ * @param buf   The mapped gntref associated with the request, or NULL
+ * @param type  The type of SuperHID device associated with the request
+ *
+ * @return The reply length on success, -1 on error (stall)
+ */
 int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type)
 {
   __u16 value, length;
@@ -432,6 +459,8 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type 
         | HID_REQ_SET_REPORT):
     printf("INTERFACE SET REPORT\n");
     if ((value >> 8) == HID_REPORT_TYPE_FEATURE) {
+      /* Un-comment this to add support for the "Device mode" HID
+       * usage (0x52) */
       /* if ((value & 0xFF) == 0x05) { */
       /*   printf("WINDOWS STUFFS SET!\n"); */
       /*   length = 3; */
@@ -486,14 +515,14 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type 
       printf("%d ", total);
       if (total > length) {
         printf("skipping interface\n");
-        goto skipshit;
+        goto skipstuffs;
       }
       memcpy(buf + total, &interface_desc, sizeof(interface_desc));
       total += sizeof(interface_desc);
       printf("%d ", total);
       if (total > length) {
         printf("skipping hid\n");
-        goto skipshit;
+        goto skipstuffs;
       }
       switch (type) {
       case SUPERHID_TYPE_MULTI:
@@ -520,22 +549,23 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type 
       printf("%d ", total);
       if (total > length) {
         printf("skipping endpoint 1\n");
-        goto skipshit;
+        goto skipstuffs;
       }
       memcpy(buf + total, &endpoint_in_desc, USB_DT_ENDPOINT_SIZE);
       total += USB_DT_ENDPOINT_SIZE;
       printf("%d ", total);
       if (total > length) {
         printf("skipping endpoint 2\n");
-        goto skipshit;
+        goto skipstuffs;
       }
+      /* Un-comment this if an OUT endpoint is needed */
       /* memcpy(buf + total, &endpoint_out_desc, USB_DT_ENDPOINT_SIZE); */
       /* total += USB_DT_ENDPOINT_SIZE; */
       /* printf("%d\n", total); */
       /* if (total > length) { */
       /*   printf("NOT ENOUGH ROOM!\n"); */
       /* } */
-    skipshit:
+    skipstuffs:
       if (total < length)
         length = total;
       goto respond;
@@ -552,6 +582,7 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type 
       memcpy(buf, &bos_desc, length);
       goto respond;
       break;
+    /* Un-comment this if you ever see this request... */
     /* case USB_DT_INTERFACE: */
     /*   if (sizeof(interface_desc) < length) */
     /*     length = sizeof(interface_desc); */

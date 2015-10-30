@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jed Lejosne <lejosnej@ainfosec.com>
+ * Copyright (c) 2015 Assured Information Security, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,16 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/**
+ * @file   superxenstore.c
+ * @author Jed Lejosne <lejosnej@ainfosec.com>
+ * @date   Fri Oct 30 10:36:17 2015
+ *
+ * @brief  XenStore interaction
+ *
+ * Functions to read/write various information from/to XenStore
+ */
+
 #include "project.h"
 
 enum XenBusStates {
@@ -23,6 +33,9 @@ enum XenBusStates {
   XB_CLOSING, XB_CLOSED
 };
 
+/**
+ * The xenstore handle and dom0 path, set by xenstore_init()
+ */
 static struct xs_handle *xs_handle;
 static char *xs_dom0path = NULL;
 
@@ -39,7 +52,7 @@ xmalloc(size_t size)
   return p;
 }
 
-/*
+/**
  * Allocating formatted string print.
  * The caller is responsible for returning the returned string.
  */
@@ -63,7 +76,7 @@ xasprintf(const char *fmt, ...)
   return s;
 }
 
-/*
+/**
  * Create a new directory in Xenstore
  */
 static int
@@ -417,13 +430,19 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
   return ret;
 }
 
+/**
+ * Spawns a device for the given domain. If the domain doesn't already
+ * have a backend, start by creating one for it.
+ *
+ * @param domid The domid of the domain
+ * @param type  The type of SuperHID device to spawn
+ */
 static void spawn(int domid, enum superhid_type type)
 {
   usbinfo_t ui;
   dominfo_t di;
   int superfd;
   int i, ret;
-  struct event *input_event;
   int slot;
 
   /* Fill the domain info */
@@ -436,29 +455,11 @@ static void spawn(int domid, enum superhid_type type)
   slot = superbackend_find_slot(domid);
   if (slot == -1) {
     /* There's no backend for this domain yet, let's create one */
-    slot = superbackend_find_free_slot();
-    if (slot == -1) {
-      xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n", domid);
-      return;
-    }
-
-    /* Create the backend */
-    for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
-      superbacks[slot].devices[i] = NULL;
-    /* printf("SET %d %s %d TO SLOT %d\n", di.di_domid, di.di_name, di.di_dompath, slot); */
-    superbacks[slot].di = di;
-    superbackend_add(di, &superbacks[slot]);
-
+    slot = superbackend_create(di);
     /* Grab input events for the domain */
-    superfd = superplugin_init(&superbacks[slot]);
-
-    if (superfd >= 0) {
-      input_event = &superbacks[slot].input_event;
-      event_set(input_event, superfd, EV_READ | EV_PERSIST,
-                input_handler, &superbacks[slot]);
-      event_add(input_event, NULL);
-    } else {
-      xd_log(LOG_ERR, "Can't grab input events for %d", domid);
+    if (superplugin_create(&superbacks[slot]) != 0) {
+      xd_log(LOG_ERR, "Failed to grab events for %d", domid);
+      return;
     }
   }
 
@@ -473,6 +474,10 @@ static void spawn(int domid, enum superhid_type type)
   superxenstore_create_usb(&di, &ui);
 }
 
+/**
+ * We're watching "/vm" to know when VM statuses change. We spawn
+ * device(s) for every running VM that doesn't have a backend (yet).
+ */
 void superxenstore_handler(void)
 {
   int i, n, len;
@@ -536,6 +541,11 @@ void superxenstore_handler(void)
   free(paths);
 }
 
+/**
+ * Initialize the xenstore handle, the dom0 path and a watch.
+ *
+ * @return The fd to select on for the watch, -1 on error
+ */
 int superxenstore_init(void)
 {
   /* Init XenStore */
@@ -560,6 +570,9 @@ int superxenstore_init(void)
   return xs_fileno(xs_handle);
 }
 
+/**
+ * Close the xenstore handle
+ */
 void superxenstore_close(void)
 {
   xs_daemon_close(xs_handle);

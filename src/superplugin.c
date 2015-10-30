@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013 Citrix Systems, Inc.
- * Copyright (c) 2015 Jed Lejosne <lejosnej@ainfosec.com>
+ * Copyright (c) 2015 Assured Information Security, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,18 +17,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/stat.h>
-#include <stdint.h>
-#include <event.h>
-#include <linux/input.h>
-#include <fcntl.h>
+/**
+ * @file   superplugin.c
+ * @author Jed Lejosne <lejosnej@ainfosec.com>
+ * @date   Fri Oct 30 10:55:56 2015
+ *
+ * @brief  Input server plugin
+ *
+ * This file is based on the reference client plugin implementation
+ * from the input server repository (testsocketclient.c).
+ * It allows to grab input events for a given domid, to send them
+ * through SuperHID.
+ */
 
 #include "project.h"
 
@@ -375,7 +375,23 @@ static struct event_record *findnext(struct buffer_t *b)
     return NULL;
 }
 
-int superplugin_callback(struct superhid_backend *superback, int fd, struct superhid_finger *finger, struct superhid_report *report)
+/**
+ * Call this function when there's input events available in the fd or
+ * in the remaining buffer. The function will handle one event at
+ * most. If it's a touch event, it will return the correponding
+ * finger. For any other event, it will fill a generic report.
+ *
+ * @param superback The SuperHID backend for the domain that select()-ed
+ * @param fd        The file descriptor that select()-ed
+ * @param finger    A pointer to a SuperHID finger for multitouch events
+ * @param report    A pointer to a generic SuperHID report for other events
+ *
+ * @return It returns the number of bytes remaining in the receiving buffer
+ */
+int superplugin_callback(struct superhid_backend *superback,
+                         int fd,
+                         struct superhid_finger *finger,
+                         struct superhid_report *report)
 {
   int n = 0;
   struct buffer_t *buf;
@@ -415,8 +431,13 @@ int superplugin_callback(struct superhid_backend *superback, int fd, struct supe
   return buf->bytes_remaining;
 }
 
-/* This function tells input_server to send us the events for the
- * domain */
+/**
+ * This function tells input_server to send us the events for the
+ * domain.
+ *
+ * @param s An open socket to input_server
+ * @param d The domid of the domain that we want to ... suck
+ */
 static void suck(int s, int d)
 {
   struct event_record e;
@@ -433,13 +454,72 @@ static void suck(int s, int d)
   }
 }
 
-int superplugin_init(struct superhid_backend *superback)
+static void input_handler(int fd, short event, void *priv)
+{
+  struct superhid_backend *superback = priv;
+  struct superhid_report_multitouch report = { 0 };
+  struct superhid_report custom_report = { 0 };
+  struct superhid_finger *finger;
+  int remaining = EVENT_SIZE;
+  int sents = 0;
+  int domid;
+
+  domid = superback->di.di_domid;
+
+  /* We send a maximum of 2 packets, because that's usually how
+   * many pending INT requests we have. */
+  while (sents < 2 && remaining >= EVENT_SIZE && superbackend_all_pending(superback))
+  {
+    finger = &report.fingers[report.count];
+    /* I don't think the finger ID can ever be 0xF. Use that to know
+     * if superplugin_callback succeeded */
+    finger->finger_id = 0xF;
+    remaining = superplugin_callback(superback, fd, finger, &custom_report);
+    if (custom_report.report_id != 0) {
+      superbackend_send_report_to_frontends(fd, &custom_report, superback);
+      memset(&custom_report, 0, sizeof(report));
+      sents++;
+      continue;
+    }
+    if (finger->finger_id != 0xF) {
+      report.report_id = REPORT_ID_MULTITOUCH;
+      report.count++;
+    }
+    if (report.count == SUPERHID_FINGER_WIDTH) {
+      /* The report is full, let's send it and start a new one */
+      superbackend_send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
+      memset(&report, 0, sizeof(report));
+      sents++;
+    }
+  }
+
+  if (report.count > 0) {
+    /* The loop ended on a partial report, we need to send it */
+    superbackend_send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
+  }
+
+  if (sents == 2 && remaining >= EVENT_SIZE) {
+    /* We sent 2 packets and the input buffer still has at least one
+     * event, we need to get rescheduled even if no more input comes */
+    event_active(&superback->input_event, event, 0);
+  }
+}
+
+/**
+ * Configures a SuperHID backend for input
+ *
+ * @param superback The SuperHID backend to initialize
+ *
+ * @return 0 on success, -1 on error
+ */
+int superplugin_create(struct superhid_backend *superback)
 {
   int s, t, len;
   struct sockaddr_un remote;
   char str[100];
   pthread_t output_thread_var;
   int domid;
+  struct event *input_event;
 
   domid = superback->di.di_domid;
 
@@ -476,5 +556,10 @@ int superplugin_init(struct superhid_backend *superback)
 
   suck(s, domid);
 
-  return s;
+  input_event = &superback->input_event;
+  event_set(input_event, s, EV_READ | EV_PERSIST,
+            input_handler, superback);
+  event_add(input_event, NULL);
+
+  return 0;
 }

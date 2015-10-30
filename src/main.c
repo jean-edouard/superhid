@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jed Lejosne <lejosnej@ainfosec.com>
+ * Copyright (c) 2015 Assured Information Security, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,138 +16,18 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/**
+ * @file   main.c
+ * @author Jed Lejosne <lejosnej@ainfosec.com>
+ * @date   Fri Oct 30 11:32:36 2015
+ *
+ * @brief  SuperHID entrypoint and misc functions
+ *
+ * This file contains the main function that initializes the SuperHID
+ * backend.
+ */
+
 #include "project.h"
-
-static void hexdump(unsigned char *data, int l)
-{
-  int i;
-
-  for (i = 0; i < l; ++i)
-    printf("%02X ", data[i]);
-  printf("sent\n");
-}
-
-void send_report(int fd, struct superhid_report *report, struct superhid_device *dev)
-{
-  usbif_response_t rsp;
-  unsigned char *data, *target;
-
-  rsp.id            = dev->pendings[dev->pendinghead];
-  rsp.actual_length = SUPERHID_REPORT_LENGTH;
-  rsp.data          = 0;
-  rsp.status        = USBIF_RSP_OKAY;
-
-  target = xc_gnttab_map_grant_ref(xcg_handle,
-                                   dev->superback->di.di_domid,
-                                   dev->pendingrefs[dev->pendinghead],
-                                   PROT_READ | PROT_WRITE);
-  if (target == NULL) {
-    xd_log(LOG_ERR, "Failed to map gntref %d", dev->pendingrefs[dev->pendinghead]);
-    return;
-  }
-  data = target + dev->pendingoffsets[dev->pendinghead];
-  memcpy(data, report, SUPERHID_REPORT_LENGTH);
-
-  xc_gnttab_munmap(xcg_handle, target, 1);
-  superbackend_send(dev, &rsp);
-
-  dev->pendinghead = (dev->pendinghead + 1) % 32;
-}
-
-static bool all_pending(struct superhid_backend *superback)
-{
-  int i;
-  struct superhid_device *dev;
-
-  for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
-    dev = superback->devices[i];
-    if (dev != NULL) {
-      while (dev->pendinghead != dev->pendingtail && dev->pendings[dev->pendinghead] == -1)
-        dev->pendinghead = (dev->pendinghead + 1) % 32;
-      if (dev->pendinghead == dev->pendingtail) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
-static void send_report_to_frontends(int fd, struct superhid_report *report, struct superhid_backend *superback)
-{
-  int i, type, id;
-  struct superhid_device *dev;
-
-  for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
-    dev = superback->devices[i];
-    if (dev != NULL && dev->pendinghead != dev->pendingtail) {
-      /* This device is pending, send the report if it matches */
-      type = dev->type;
-      id = report->report_id;
-      if ( type == SUPERHID_TYPE_MULTI                                    ||
-          (type == SUPERHID_TYPE_MOUSE     && id == REPORT_ID_MOUSE)      ||
-          (type == SUPERHID_TYPE_DIGITIZER && id == REPORT_ID_MULTITOUCH) ||
-          (type == SUPERHID_TYPE_TABLET    && id == REPORT_ID_TABLET)     ||
-          (type == SUPERHID_TYPE_KEYBOARD  && id == REPORT_ID_KEYBOARD)) {
-        send_report(fd, report, superback->devices[i]);
-        return;
-      }
-    }
-  }
-
-  xd_log(LOG_ERR, "COULD NOT SEND REPORT %d\n", report->report_id);
-}
-
-void input_handler(int fd, short event, void *priv)
-{
-  struct superhid_backend *superback = priv;
-  struct superhid_report_multitouch report = { 0 };
-  struct superhid_report custom_report = { 0 };
-  struct superhid_finger *finger;
-  int remaining = EVENT_SIZE;
-  int sents = 0;
-  int domid;
-
-  domid = superback->di.di_domid;
-
-  /* We send a maximum of 2 packets, because that's usually how
-   * many pending INT requests we have. */
-  while (sents < 2 && remaining >= EVENT_SIZE && all_pending(superback))
-  {
-    finger = &report.fingers[report.count];
-    /* I don't think the finger ID can ever be 0xF. Use that to know
-     * if superplugin_callback succeeded */
-    finger->finger_id = 0xF;
-    remaining = superplugin_callback(superback, fd, finger, &custom_report);
-    if (custom_report.report_id != 0) {
-      send_report_to_frontends(fd, &custom_report, superback);
-      memset(&custom_report, 0, sizeof(report));
-      sents++;
-      continue;
-    }
-    if (finger->finger_id != 0xF) {
-      report.report_id = REPORT_ID_MULTITOUCH;
-      report.count++;
-    }
-    if (report.count == SUPERHID_FINGER_WIDTH) {
-      /* The report is full, let's send it and start a new one */
-      send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
-      memset(&report, 0, sizeof(report));
-      sents++;
-    }
-  }
-
-  if (report.count > 0) {
-    /* The loop ended on a partial report, we need to send it */
-    send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
-  }
-
-  if (sents == 2 && remaining >= EVENT_SIZE) {
-    /* We sent 2 packets and the input buffer still has at least one
-     * event, we need to get rescheduled even if no more input comes */
-    event_active(&superback->input_event, event, 0);
-  }
-}
 
 void xenstore_handler(int fd, short event, void *priv)
 {

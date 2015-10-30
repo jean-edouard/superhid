@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jed Lejosne <lejosnej@ainfosec.com>
+ * Copyright (c) 2015 Assured Information Security, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,6 +14,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+/**
+ * @file   superbackend.c
+ * @author Jed Lejosne <lejosnej@ainfosec.com>
+ * @date   Fri Oct 30 11:25:19 2015
+ *
+ * @brief  SuperHID backend functions
+ *
+ * This implements the libxenbackend API and handles incoming
+ * requests.
  */
 
 #include "project.h"
@@ -393,4 +404,97 @@ int superbackend_find_free_slot(void)
     return -1;
   else
     return i;
+}
+
+int superbackend_create(dominfo_t di)
+{
+  int slot, i;
+
+  slot = superbackend_find_free_slot();
+  if (slot == -1) {
+    xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n", di.di_domid);
+    return -1;
+  }
+
+  /* Create the backend */
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i)
+    superbacks[slot].devices[i] = NULL;
+  /* printf("SET %d %s %d TO SLOT %d\n", di.di_domid, di.di_name, di.di_dompath, slot); */
+  superbacks[slot].di = di;
+  superbackend_add(di, &superbacks[slot]);
+
+  return slot;
+}
+
+static void send_report(int fd, struct superhid_report *report, struct superhid_device *dev)
+{
+  usbif_response_t rsp;
+  unsigned char *data, *target;
+
+  rsp.id            = dev->pendings[dev->pendinghead];
+  rsp.actual_length = SUPERHID_REPORT_LENGTH;
+  rsp.data          = 0;
+  rsp.status        = USBIF_RSP_OKAY;
+
+  target = xc_gnttab_map_grant_ref(xcg_handle,
+                                   dev->superback->di.di_domid,
+                                   dev->pendingrefs[dev->pendinghead],
+                                   PROT_READ | PROT_WRITE);
+  if (target == NULL) {
+    xd_log(LOG_ERR, "Failed to map gntref %d", dev->pendingrefs[dev->pendinghead]);
+    return;
+  }
+  data = target + dev->pendingoffsets[dev->pendinghead];
+  memcpy(data, report, SUPERHID_REPORT_LENGTH);
+
+  xc_gnttab_munmap(xcg_handle, target, 1);
+  superbackend_send(dev, &rsp);
+
+  dev->pendinghead = (dev->pendinghead + 1) % 32;
+}
+
+bool superbackend_all_pending(struct superhid_backend *superback)
+{
+  int i;
+  struct superhid_device *dev;
+
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
+    dev = superback->devices[i];
+    if (dev != NULL) {
+      while (dev->pendinghead != dev->pendingtail && dev->pendings[dev->pendinghead] == -1)
+        dev->pendinghead = (dev->pendinghead + 1) % 32;
+      if (dev->pendinghead == dev->pendingtail) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+void superbackend_send_report_to_frontends(int fd,
+                                           struct superhid_report *report,
+                                           struct superhid_backend *superback)
+{
+  int i, type, id;
+  struct superhid_device *dev;
+
+  for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
+    dev = superback->devices[i];
+    if (dev != NULL && dev->pendinghead != dev->pendingtail) {
+      /* This device is pending, send the report if it matches */
+      type = dev->type;
+      id = report->report_id;
+      if ( type == SUPERHID_TYPE_MULTI                                    ||
+          (type == SUPERHID_TYPE_MOUSE     && id == REPORT_ID_MOUSE)      ||
+          (type == SUPERHID_TYPE_DIGITIZER && id == REPORT_ID_MULTITOUCH) ||
+          (type == SUPERHID_TYPE_TABLET    && id == REPORT_ID_TABLET)     ||
+          (type == SUPERHID_TYPE_KEYBOARD  && id == REPORT_ID_KEYBOARD)) {
+        send_report(fd, report, superback->devices[i]);
+        return;
+      }
+    }
+  }
+
+  xd_log(LOG_ERR, "COULD NOT SEND REPORT %d\n", report->report_id);
 }

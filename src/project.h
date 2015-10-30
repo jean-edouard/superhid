@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jed Lejosne <lejosnej@ainfosec.com>
+ * Copyright (c) 2015 Assured Information Security, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,6 +14,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+/**
+ * @file   project.h
+ * @author Jed Lejosne <lejosnej@ainfosec.com>
+ * @date   Fri Oct 30 11:26:10 2015
+ *
+ * @brief  Main header
+ *
+ * This is the main SuperHID header, all includes and exported
+ * functions live here.
  */
 
 #ifndef   	PROJECT_H_
@@ -58,6 +69,11 @@
 #include <sys/int_types.h>
 #endif
 
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/stat.h>
 #include <inttypes.h>
 #include <event.h>
 #include <sys/mman.h>
@@ -72,6 +88,7 @@
 #include <linux/usb/ch9.h>
 #include <linux/hid.h>
 #include <linux/hiddev.h>
+#include <linux/input.h>
 #include <xen/grant_table.h>
 
 #include "usbif.h"
@@ -269,20 +286,27 @@ struct superhid_backend superbacks[SUPERHID_MAX_BACKENDS];
 int input_grabber;
 
 void superhid_init(void);
-int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type);
-int superxenstore_init(void);
-int superxenstore_get_dominfo(int domid, dominfo_t *di);
-int superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
-int superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp);
+int  superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type);
+int  superxenstore_init(void);
+int  superxenstore_get_dominfo(int domid, dominfo_t *di);
+int  superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
+int  superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp);
 void superxenstore_handler(void);
 void superxenstore_close(void);
-int superbackend_init(void);
+int  superbackend_init(void);
 xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
-int superbackend_find_slot(int domid);
-int superbackend_find_free_slot(void);
-int superplugin_callback(struct superhid_backend *superback, int fd, struct superhid_finger *finger, struct superhid_report *report);
-int superplugin_init(struct superhid_backend *superback);
-void input_handler(int fd, short event, void *priv);
+int  superbackend_find_slot(int domid);
+int  superbackend_find_free_slot(void);
+int  superbackend_create(dominfo_t di);
+bool superbackend_all_pending(struct superhid_backend *superback);
+void superbackend_send_report_to_frontends(int fd,
+                                           struct superhid_report *report,
+                                           struct superhid_backend *superback);
+int  superplugin_callback(struct superhid_backend *superback,
+                          int fd,
+                          struct superhid_finger *finger,
+                          struct superhid_report *report);
+int  superplugin_create(struct superhid_backend *superback);
 
 #endif 	    /* !PROJECT_H_ */
