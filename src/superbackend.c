@@ -64,7 +64,7 @@ void consume_requests(struct superhid_device *dev)
   int i;
   uint32_t domids[32];
 
-  if (dev->back_ring_ready != 1) {
+  if (!dev->back_ring_ready) {
     xd_log(LOG_ERR, "Backend not ready to consume");
     return;
   }
@@ -85,7 +85,7 @@ void consume_requests(struct superhid_device *dev)
                                        req.u.gref, PROT_READ | PROT_WRITE);
       }
       if (buf)
-        responded = superhid_setup(&setup, buf + req.offset, dev->type);
+        responded = superhid_setup(&setup, (char*)buf + req.offset, dev->type);
       else
         responded = superhid_setup(&setup, NULL, dev->type);
       if (responded >= 0) {
@@ -191,6 +191,7 @@ superback_alloc(xen_backend_t backend, int devid, void *priv)
   dev->evtfd = -1;
   dev->superback = superback;
   dev->type = devid;
+  dev->back_ring_ready = false;
 
   superback->devices[devid] = dev;
 
@@ -236,7 +237,7 @@ superback_connect(xen_device_t xendev)
   }
 
   BACK_RING_INIT(&dev->back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
-  dev->back_ring_ready = 1;
+  dev->back_ring_ready = true;
 
   event_set(&dev->event, dev->evtfd, EV_READ | EV_PERSIST,
             superback_evtchn_handler,

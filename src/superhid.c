@@ -409,7 +409,7 @@ void superhid_init(void)
  *
  * @return The reply length on success, -1 on error (stall)
  */
-int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type)
+int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type type)
 {
   __u16 value, length;
   struct feature_report feature;

@@ -110,6 +110,8 @@
 /* The following is from libxenbackend. It should be exported and bigger */
 #define BACKEND_DEVICE_MAX     16
 
+#define BIT_FIELD              unsigned int
+
 /**
  * The (stupid) logging macro
  */
@@ -151,7 +153,7 @@ struct superhid_device
   struct superhid_backend *superback;
   void                    *page;
   usbif_back_ring_t        back_ring;
-  unsigned int             back_ring_ready:1;
+  bool                     back_ring_ready;
   int                      evtfd;
   void                    *priv;
   uint64_t                 pendings[32];       /* usbif_request_t.id */
@@ -210,12 +212,12 @@ struct feature_report {
 
 struct superhid_finger
 {
-  uint8_t  tip_switch:1;  /* Is the finger currently touching? */
-  uint8_t  placeholder:3; /* 3 spare bytes if we ever want extra
-                           * stuffs like IN_RANGE or DATA_VALID */
-  uint8_t  finger_id:4;   /* The finger ID, should be between 0 and 9 */
-  uint16_t x;             /* Absolute position of the finger on the X axis */
-  uint16_t y;             /* Absolute position of the finger on the Y axis */
+  BIT_FIELD tip_switch:1;  /* Is the finger currently touching? */
+  BIT_FIELD placeholder:3; /* 3 spare bytes if we ever want extra
+                            * stuffs like IN_RANGE or DATA_VALID */
+  BIT_FIELD finger_id:4;   /* The finger ID, should be between 0 and 9 */
+  uint16_t  x;             /* Absolute position of the finger on the X axis */
+  uint16_t  y;             /* Absolute position of the finger on the Y axis */
 } __attribute__ ((__packed__));
 
 struct superhid_report
@@ -233,15 +235,15 @@ struct superhid_report_multitouch
 
 struct superhid_report_tablet
 {
-  uint8_t  report_id;     /* Should always be REPORT_ID_TABLET */
-  uint8_t  left_click:1;
-  uint8_t  right_click:1;
-  uint8_t  middle_click:1;
-  uint8_t  placeholder:5;
-  uint16_t x;             /* Absolute position on the X axis */
-  uint16_t y;             /* Absolute position on the Y axis */
-  int8_t   wheel;         /* Vertical scroll wheel. NOT USED */
-  uint8_t  pad[SUPERHID_REPORT_LENGTH - 7];
+  uint8_t   report_id;      /* Should always be REPORT_ID_TABLET */
+  BIT_FIELD left_click:1;
+  BIT_FIELD right_click:1;
+  BIT_FIELD middle_click:1;
+  BIT_FIELD placeholder:5;
+  uint16_t  x;              /* Absolute position on the X axis */
+  uint16_t  y;              /* Absolute position on the Y axis */
+  int8_t    wheel;          /* Vertical scroll wheel. NOT USED */
+  uint8_t   pad[SUPERHID_REPORT_LENGTH - 7];
 } __attribute__ ((__packed__));
 
 struct superhid_report_keyboard
@@ -255,17 +257,17 @@ struct superhid_report_keyboard
 
 struct superhid_report_mouse
 {
-  uint8_t  report_id;     /* Should always be REPORT_ID_MOUSE */
-  uint8_t  left_click:1;
-  uint8_t  right_click:1;
-  uint8_t  middle_click:1;
-  uint8_t  fourth_click:1;
-  uint8_t  fifth_click:1;
-  uint8_t  placeholder:3;
-  uint8_t  x;
-  uint8_t  y;
-  uint8_t  wheel;
-  uint8_t  pad[SUPERHID_REPORT_LENGTH - 5];
+  uint8_t   report_id;     /* Should always be REPORT_ID_MOUSE */
+  BIT_FIELD left_click:1;
+  BIT_FIELD right_click:1;
+  BIT_FIELD middle_click:1;
+  BIT_FIELD fourth_click:1;
+  BIT_FIELD fifth_click:1;
+  BIT_FIELD placeholder:3;
+  uint8_t   x;
+  uint8_t   y;
+  uint8_t   wheel;
+  uint8_t   pad[SUPERHID_REPORT_LENGTH - 5];
 } __attribute__ ((__packed__));
 
 /* Report IDs for the various devices */
@@ -286,7 +288,7 @@ struct superhid_backend superbacks[SUPERHID_MAX_BACKENDS];
 int input_grabber;
 
 void superhid_init(void);
-int  superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type type);
+int  superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type type);
 int  superxenstore_init(void);
 int  superxenstore_get_dominfo(int domid, dominfo_t *di);
 int  superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
