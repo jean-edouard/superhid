@@ -116,9 +116,9 @@
  * The (stupid) logging macro
  */
 #ifdef DEBUG
-#define xd_log(I, ...) do { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#define superlog(I, ...) do { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } while (0)
 #else
-#define xd_log(I, ...) do { if (I != LOG_DEBUG) { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } } while (0)
+#define superlog(I, ...) do { if (I != LOG_DEBUG) { fprintf(stderr, ##__VA_ARGS__); fprintf(stderr, "\n"); } } while (0)
 #endif
 
 typedef struct dominfo

@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     xcg_handle = xc_gnttab_open(NULL, 0);
   }
   if (xcg_handle == NULL) {
-    xd_log(LOG_ERR, "Failed to connect to xc");
+    superlog(LOG_ERR, "Failed to connect to xc");
     return 1;
   }
 

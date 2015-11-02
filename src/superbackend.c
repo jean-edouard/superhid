@@ -31,26 +31,26 @@
 
 static void print_request(usbif_request_t *req)
 {
-  xd_log(LOG_DEBUG, "***** GOT REQUEST *****");
-  xd_log(LOG_DEBUG, "id=%"PRIu64, req->id);
-  xd_log(LOG_DEBUG, "setup=%"PRIX64, req->setup);
-  xd_log(LOG_DEBUG, "type=%X", req->type);
-  xd_log(LOG_DEBUG, "endpoint=%d", req->endpoint);
-  xd_log(LOG_DEBUG, "offset=%X", req->offset);
-  xd_log(LOG_DEBUG, "length=%d", req->length);
-  xd_log(LOG_DEBUG, "nr_segments=%d", req->nr_segments);
-  xd_log(LOG_DEBUG, "flags=%X", req->flags);
-  xd_log(LOG_DEBUG, "nr_packets=%d", req->nr_packets);
-  xd_log(LOG_DEBUG, "startframe=%d", req->startframe);
+  superlog(LOG_DEBUG, "***** GOT REQUEST *****");
+  superlog(LOG_DEBUG, "id=%"PRIu64, req->id);
+  superlog(LOG_DEBUG, "setup=%"PRIX64, req->setup);
+  superlog(LOG_DEBUG, "type=%X", req->type);
+  superlog(LOG_DEBUG, "endpoint=%d", req->endpoint);
+  superlog(LOG_DEBUG, "offset=%X", req->offset);
+  superlog(LOG_DEBUG, "length=%d", req->length);
+  superlog(LOG_DEBUG, "nr_segments=%d", req->nr_segments);
+  superlog(LOG_DEBUG, "flags=%X", req->flags);
+  superlog(LOG_DEBUG, "nr_packets=%d", req->nr_packets);
+  superlog(LOG_DEBUG, "startframe=%d", req->startframe);
 }
 
 static void print_setup(struct usb_ctrlrequest *setup)
 {
-  xd_log(LOG_DEBUG, "SETUP.bRequestType=%X", setup->bRequestType);
-  xd_log(LOG_DEBUG, "SETUP.bRequest=%X", setup->bRequest);
-  xd_log(LOG_DEBUG, "SETUP.wValue=%X", setup->wValue);
-  xd_log(LOG_DEBUG, "SETUP.wIndex=%X", setup->wIndex);
-  xd_log(LOG_DEBUG, "SETUP.wLength=%d", setup->wLength);
+  superlog(LOG_DEBUG, "SETUP.bRequestType=%X", setup->bRequestType);
+  superlog(LOG_DEBUG, "SETUP.bRequest=%X", setup->bRequest);
+  superlog(LOG_DEBUG, "SETUP.wValue=%X", setup->wValue);
+  superlog(LOG_DEBUG, "SETUP.wIndex=%X", setup->wIndex);
+  superlog(LOG_DEBUG, "SETUP.wLength=%d", setup->wLength);
 }
 
 void consume_requests(struct superhid_device *dev)
@@ -65,7 +65,7 @@ void consume_requests(struct superhid_device *dev)
   uint32_t domids[32];
 
   if (!dev->back_ring_ready) {
-    xd_log(LOG_ERR, "Backend not ready to consume");
+    superlog(LOG_ERR, "Backend not ready to consume");
     return;
   }
 
@@ -104,7 +104,7 @@ void consume_requests(struct superhid_device *dev)
       superbackend_send(dev, &rsp);
       break;
     case USBIF_T_INT: /* Interrupt request. Pend it. */
-      xd_log(LOG_DEBUG, "%d: pendings[%d]=%"PRIu64, dev->devid, dev->pendingtail, req.id);
+      superlog(LOG_DEBUG, "%d: pendings[%d]=%"PRIu64, dev->devid, dev->pendingtail, req.id);
       dev->pendings[dev->pendingtail] = req.id;
       /* TODO: FIXME: handle multiple grefs! */
       dev->pendingrefs[dev->pendingtail] = req.u.gref[0];
@@ -143,7 +143,7 @@ void consume_requests(struct superhid_device *dev)
         rsp.actual_length = 0;
         rsp.data          = 0;
         rsp.status        = USBIF_RSP_ERROR;
-        xd_log(LOG_DEBUG, "Failing to cancel %"PRIu64, tocancel);
+        superlog(LOG_DEBUG, "Failing to cancel %"PRIu64, tocancel);
         superbackend_send(dev, &rsp);
       } else {
         rsp.id            = tocancel;
@@ -154,7 +154,7 @@ void consume_requests(struct superhid_device *dev)
         dev->pendings[i] = -1;
         dev->pendingrefs[i] = -1;
         dev->pendingoffsets[i] = -1;
-        xd_log(LOG_DEBUG, "Cancelled %"PRIu64, tocancel);
+        superlog(LOG_DEBUG, "Cancelled %"PRIu64, tocancel);
         rsp.id = req.id;
         rsp.actual_length = 0;
         rsp.data          = 0;
@@ -163,7 +163,7 @@ void consume_requests(struct superhid_device *dev)
       }
       break;
     default:
-      xd_log(LOG_DEBUG, "Unknown request type %d", req.type);
+      superlog(LOG_DEBUG, "Unknown request type %d", req.type);
       rsp.id = req.id;
       rsp.actual_length = -1;
       rsp.data          = 0;
@@ -174,7 +174,7 @@ void consume_requests(struct superhid_device *dev)
 
     dev->back_ring.req_cons++;
 
-    xd_log(LOG_DEBUG, "***********************\n");
+    superlog(LOG_DEBUG, "***********************\n");
   }
 }
 
@@ -261,7 +261,7 @@ superback_disconnect(xen_device_t xendev)
   /* Also this function seems to get called with bogus values after a
    * backend got killed... */
   if (dev != NULL && dev->priv != NULL && dev->devid > 0 && dev->devid < 6) {
-    xd_log(LOG_INFO, "disconnect %d\n", dev->devid);
+    superlog(LOG_INFO, "disconnect %d\n", dev->devid);
     event_del(&dev->event);
     backend_unbind_evtchn(dev->backend, dev->devid);
     ui.usb_virtid = dev->type;
@@ -283,7 +283,7 @@ superback_disconnect(xen_device_t xendev)
 
   if (kill != NULL) {
     /* No device use that backend anymore, kill it */
-    xd_log(LOG_INFO, "KILLING THE BACKEND FOR DOMID %d", kill->di.di_domid);
+    superlog(LOG_INFO, "KILLING THE BACKEND FOR DOMID %d", kill->di.di_domid);
     /* This will call this function will all the devices it thinks
      * are still alive... We need a backend_free_device() */
     /* backend_release(kill->backend); */
@@ -291,7 +291,7 @@ superback_disconnect(xen_device_t xendev)
       close(kill->buffers.s);
       /* superxenstore will do that when the VM is gone */
       input_grabber = -input_grabber;
-      /* xd_log(LOG_INFO, "DOMID %d no longer holds the input", kill->di.di_domid); */
+      /* superlog(LOG_INFO, "DOMID %d no longer holds the input", kill->di.di_domid); */
     }
     memset(kill, 0, sizeof(struct superhid_backend));
   }
@@ -350,7 +350,7 @@ int superbackend_init(void)
   memset(superbacks, 0, sizeof(struct superhid_backend) * SUPERHID_MAX_BACKENDS);
 
   if (backend_init(SUPERHID_DOMID)) {
-    xd_log(LOG_ERR, "Failed to initialize libxenbackend");
+    superlog(LOG_ERR, "Failed to initialize libxenbackend");
     return -1;
   }
 
@@ -362,7 +362,7 @@ xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback)
   superback->backend = backend_register(SUPERHID_NAME, di.di_domid, &superback_ops, superback);
   if (!superback->backend)
   {
-    xd_log(LOG_ERR, "Failed to register as a backend for domid %d", di.di_domid);
+    superlog(LOG_ERR, "Failed to register as a backend for domid %d", di.di_domid);
     return NULL;
   }
 
@@ -409,7 +409,7 @@ int superbackend_create(dominfo_t di)
 
   slot = superbackend_find_free_slot();
   if (slot == -1) {
-    xd_log(LOG_ERR, "Can't create a backend for domid %d, we're full!\n", di.di_domid);
+    superlog(LOG_ERR, "Can't create a backend for domid %d, we're full!\n", di.di_domid);
     return -1;
   }
 
@@ -438,7 +438,7 @@ static void send_report(int fd, struct superhid_report *report, struct superhid_
                                    dev->pendingrefs[dev->pendinghead],
                                    PROT_READ | PROT_WRITE);
   if (target == NULL) {
-    xd_log(LOG_ERR, "Failed to map gntref %d", dev->pendingrefs[dev->pendinghead]);
+    superlog(LOG_ERR, "Failed to map gntref %d", dev->pendingrefs[dev->pendinghead]);
     return;
   }
   data = target + dev->pendingoffsets[dev->pendinghead];
@@ -493,5 +493,5 @@ void superbackend_send_report_to_frontends(int fd,
     }
   }
 
-  xd_log(LOG_ERR, "COULD NOT SEND REPORT %d\n", report->report_id);
+  superlog(LOG_ERR, "COULD NOT SEND REPORT %d\n", report->report_id);
 }

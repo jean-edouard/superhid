@@ -45,7 +45,7 @@ xmalloc(size_t size)
   void *p;
 
   if ((p = malloc(size)) == NULL) {
-    xd_log(LOG_CRIT, "Out of memory");
+    superlog(LOG_CRIT, "Out of memory");
     exit(2);
   }
 
@@ -85,7 +85,7 @@ xenstore_add_dir(xs_transaction_t xt, char *path, int d0, int p0, int d1, int p1
   struct xs_permissions perms[2];
 
   if (xs_mkdir(xs_handle, xt, path) == false) {
-    xd_log(LOG_ERR, "XenStore error mkdir()ing %s", path);
+    superlog(LOG_ERR, "XenStore error mkdir()ing %s", path);
     return -1;
   }
 
@@ -94,7 +94,7 @@ xenstore_add_dir(xs_transaction_t xt, char *path, int d0, int p0, int d1, int p1
   perms[1].perms = p1;
   perms[1].id = d1;
   if (xs_set_permissions(xs_handle, xt, path, perms, 2) == false) {
-    xd_log(LOG_ERR, "XenStore error setting permissions on %s",
+    superlog(LOG_ERR, "XenStore error setting permissions on %s",
            path);
     xs_rm(xs_handle, xt, path);
     return -1;
@@ -117,7 +117,7 @@ xenstore_set_keyval(xs_transaction_t xt, char *path, char *key, char *val)
   }
 
   if (xs_write(xs_handle, xt, path, val, strlen(val)) == false) {
-    xd_log(LOG_ERR, "XenStore error writing %s", path);
+    superlog(LOG_ERR, "XenStore error writing %s", path);
     return -1;
   }
 
@@ -152,7 +152,7 @@ superxenstore_get_dominfo(int domid, dominfo_t *di)
   di->di_domid = domid;
   di->di_dompath = xs_get_domain_path(xs_handle, di->di_domid);
   if (!di->di_dompath) {
-    xd_log(LOG_ERR, "Could not get domain %d path from xenstore", domid);
+    superlog(LOG_ERR, "Could not get domain %d path from xenstore", domid);
     return -ENOENT;
   }
   di->di_name = xasprintf("Domain-%d", domid);
@@ -169,7 +169,7 @@ superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   char value[32];
   xs_transaction_t trans;
 
-  xd_log(LOG_DEBUG, "Creating VUSB node for %d.%d",
+  superlog(LOG_DEBUG, "Creating VUSB node for %d.%d",
          usbp->usb_bus, usbp->usb_device);
 
   /*
@@ -237,7 +237,7 @@ superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   }
 
   xs_transaction_end(xs_handle, trans, true);
-  xd_log(LOG_ERR, "Failed to write usb info to XenStore");
+  superlog(LOG_ERR, "Failed to write usb info to XenStore");
   free(fepath);
   free(bepath);
 
@@ -348,7 +348,7 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
   char *fepath;
   int ret;
 
-  xd_log(LOG_INFO, "Deleting VUSB node %d for %d.%d",
+  superlog(LOG_INFO, "Deleting VUSB node %d for %d.%d",
          usbp->usb_virtid, usbp->usb_bus, usbp->usb_device);
 
   bepath = xenstore_dev_bepath(domp, "vusb", usbp->usb_virtid);
@@ -366,10 +366,10 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
     xs_rm(xs_handle, XBT_NULL, fepath);
     ret = 0;
   } else {
-    xd_log(LOG_ERR, "Failed to bring the USB device offline");
+    superlog(LOG_ERR, "Failed to bring the USB device offline");
     /* FIXME: Should we keep the nodes around? Check if the VM is
      * asleep? */
-    xd_log(LOG_ERR, "Cleaning xenstore nodes anyway");
+    superlog(LOG_ERR, "Cleaning xenstore nodes anyway");
     xs_rm(xs_handle, XBT_NULL, bepath);
     xs_rm(xs_handle, XBT_NULL, fepath);
     ret = -1;
@@ -397,7 +397,7 @@ static void spawn(int domid, enum superhid_type type)
   /* Fill the domain info */
   ret = superxenstore_get_dominfo(domid, &di);
   if (ret != 0) {
-    xd_log(LOG_ERR, "Invalid domid %d", domid);
+    superlog(LOG_ERR, "Invalid domid %d", domid);
     return;
   }
 
@@ -407,7 +407,7 @@ static void spawn(int domid, enum superhid_type type)
     slot = superbackend_create(di);
     /* Grab input events for the domain */
     if (superplugin_create(&superbacks[slot]) != 0) {
-      xd_log(LOG_ERR, "Failed to grab events for %d", domid);
+      superlog(LOG_ERR, "Failed to grab events for %d", domid);
       return;
     }
   }
@@ -503,7 +503,7 @@ int superxenstore_init(void)
     xs_handle = xs_daemon_open();
   }
   if (xs_handle == NULL) {
-    xd_log(LOG_ERR, "Failed to connect to xenstore");
+    superlog(LOG_ERR, "Failed to connect to xenstore");
     return -1;
   }
 
@@ -511,7 +511,7 @@ int superxenstore_init(void)
     xs_dom0path = xs_get_domain_path(xs_handle, 0);
   }
   if (xs_dom0path == NULL) {
-    xd_log(LOG_ERR, "Could not get domain 0 path from XenStore");
+    superlog(LOG_ERR, "Could not get domain 0 path from XenStore");
     return -1;
   }
 

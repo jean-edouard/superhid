@@ -188,7 +188,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       if (!just_syned)
         memcpy(res, &(fingers[finger]), sizeof(struct superhid_finger));
       finger = ivalue;
-      xd_log(LOG_DEBUG, "finger %d", finger);
+      superlog(LOG_DEBUG, "finger %d", finger);
       break;
     case ABS_MT_TRACKING_ID:
       prevtip = fingers[finger].tip_switch;
@@ -270,7 +270,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       just_syned = 1;
       /* re-init */
       /* Nothing to do? */
-      xd_log(LOG_DEBUG, "SYN_REPORT\n");
+      superlog(LOG_DEBUG, "SYN_REPORT\n");
       return;
       break;
     default:
@@ -399,7 +399,7 @@ int superplugin_callback(struct superhid_backend *superback,
     n = recv(fd, &b[buf->bytes_remaining], buffersize - buf->bytes_remaining, 0);
 
   if (n < 0) {
-    xd_log(LOG_ERR, "FAILED TO READ THE FD\n");
+    superlog(LOG_ERR, "FAILED TO READ THE FD\n");
     perror("recv");
     return buf->bytes_remaining;
   }
