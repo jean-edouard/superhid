@@ -462,7 +462,7 @@ static void input_handler(int fd, short event, void *priv)
     finger->finger_id = 0xF;
     remaining = superplugin_callback(superback, fd, finger, &custom_report);
     if (custom_report.report_id != 0) {
-      superbackend_send_report_to_frontends(fd, &custom_report, superback);
+      superbackend_send_report_to_frontends(&custom_report, superback);
       memset(&custom_report, 0, sizeof(report));
       sents++;
       continue;
@@ -473,7 +473,7 @@ static void input_handler(int fd, short event, void *priv)
     }
     if (report.count == SUPERHID_FINGER_WIDTH) {
       /* The report is full, let's send it and start a new one */
-      superbackend_send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
+      superbackend_send_report_to_frontends((struct superhid_report *)&report, superback);
       memset(&report, 0, sizeof(report));
       sents++;
     }
@@ -481,7 +481,7 @@ static void input_handler(int fd, short event, void *priv)
 
   if (report.count > 0) {
     /* The loop ended on a partial report, we need to send it */
-    superbackend_send_report_to_frontends(fd, (struct superhid_report *)&report, superback);
+    superbackend_send_report_to_frontends((struct superhid_report *)&report, superback);
   }
 
   if (sents == 2 && remaining >= EVENT_SIZE) {

@@ -53,7 +53,7 @@ static void print_setup(struct usb_ctrlrequest *setup)
   superlog(LOG_DEBUG, "SETUP.wLength=%d", setup->wLength);
 }
 
-void consume_requests(struct superhid_device *dev)
+static void consume_requests(struct superhid_device *dev)
 {
   usbif_request_t req;
   usbif_response_t rsp;
@@ -345,6 +345,11 @@ static struct xen_backend_ops superback_ops = {
   superback_free
 };
 
+/**
+ * Initializes the backend array and libxenbackend
+ *
+ * @return The libxenbackend xenstore handle for setting up the watch event
+ */
 int superbackend_init(void)
 {
   memset(superbacks, 0, sizeof(struct superhid_backend) * SUPERHID_MAX_BACKENDS);
@@ -369,6 +374,12 @@ static xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *sup
   return superback->backend;
 }
 
+/**
+ * Send a response packet to a given SuperHID device
+ *
+ * @param device The device
+ * @param rsp    The response
+ */
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp)
 {
   memcpy(RING_GET_RESPONSE(&device->back_ring, device->back_ring.rsp_prod_pvt), rsp, sizeof(*rsp));
@@ -377,6 +388,13 @@ void superbackend_send(struct superhid_device *device, usbif_response_t *rsp)
   backend_evtchn_notify(device->backend, device->devid);
 }
 
+/**
+ * Find the index of a domain in the list of backend
+ *
+ * @param domid The domid of the domain
+ *
+ * @return The slot, or index, of the domain in the array, or -1
+ */
 int superbackend_find_slot(int domid)
 {
   int i = 0;
@@ -403,6 +421,13 @@ static int superbackend_find_free_slot(void)
     return i;
 }
 
+/**
+ * Creates and adds a SuperHID backend for a given domain
+ *
+ * @param di The domain info
+ *
+ * @return The slot, or index, of the domain the SuperHID backend array
+ */
 int superbackend_create(dominfo_t di)
 {
   int slot, i;
@@ -423,7 +448,7 @@ int superbackend_create(dominfo_t di)
   return slot;
 }
 
-static void send_report(int fd, struct superhid_report *report, struct superhid_device *dev)
+static void send_report(struct superhid_report *report, struct superhid_device *dev)
 {
   usbif_response_t rsp;
   unsigned char *data, *target;
@@ -450,6 +475,16 @@ static void send_report(int fd, struct superhid_report *report, struct superhid_
   dev->pendinghead = (dev->pendinghead + 1) % 32;
 }
 
+/**
+ * Checks if there's pending USBIF_T_INT requests for all the devices
+ * handled by a given backend.
+ * TODO: Make this device-specific. For example, we don't care about
+ * pending keyboard requests if we're sending a mouse move.
+ *
+ * @param superback The SuperHID backend
+ *
+ * @return true if all devices are pending, false otherwise
+ */
 bool superbackend_all_pending(struct superhid_backend *superback)
 {
   int i;
@@ -469,8 +504,13 @@ bool superbackend_all_pending(struct superhid_backend *superback)
   return true;
 }
 
-void superbackend_send_report_to_frontends(int fd,
-                                           struct superhid_report *report,
+/**
+ * Send a HID report to all the devices that have a compatible type
+ *
+ * @param report    The report to send
+ * @param superback The backend to use
+ */
+void superbackend_send_report_to_frontends(struct superhid_report *report,
                                            struct superhid_backend *superback)
 {
   int i, type, id;
@@ -487,7 +527,7 @@ void superbackend_send_report_to_frontends(int fd,
           (type == SUPERHID_TYPE_DIGITIZER && id == REPORT_ID_MULTITOUCH) ||
           (type == SUPERHID_TYPE_TABLET    && id == REPORT_ID_TABLET)     ||
           (type == SUPERHID_TYPE_KEYBOARD  && id == REPORT_ID_KEYBOARD)) {
-        send_report(fd, report, superback->devices[i]);
+        send_report(report, superback->devices[i]);
         return;
       }
     }

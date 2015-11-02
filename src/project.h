@@ -299,8 +299,7 @@ void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
 int  superbackend_find_slot(int domid);
 int  superbackend_create(dominfo_t di);
 bool superbackend_all_pending(struct superhid_backend *superback);
-void superbackend_send_report_to_frontends(int fd,
-                                           struct superhid_report *report,
+void superbackend_send_report_to_frontends(struct superhid_report *report,
                                            struct superhid_backend *superback);
 int  superplugin_create(struct superhid_backend *superback);
 
