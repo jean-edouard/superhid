@@ -357,7 +357,7 @@ int superbackend_init(void)
   return backend_xenstore_fd();
 }
 
-xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback)
+static xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback)
 {
   superback->backend = backend_register(SUPERHID_NAME, di.di_domid, &superback_ops, superback);
   if (!superback->backend)
@@ -390,7 +390,7 @@ int superbackend_find_slot(int domid)
     return i;
 }
 
-int superbackend_find_free_slot(void)
+static int superbackend_find_free_slot(void)
 {
   int i = 0;
 

@@ -378,10 +378,10 @@ static struct event_record *findnext(struct buffer_t *b)
  *
  * @return It returns the number of bytes remaining in the receiving buffer
  */
-int superplugin_callback(struct superhid_backend *superback,
-                         int fd,
-                         struct superhid_finger *finger,
-                         struct superhid_report *report)
+static int superplugin_callback(struct superhid_backend *superback,
+                                int fd,
+                                struct superhid_finger *finger,
+                                struct superhid_report *report)
 {
   int n = 0;
   struct buffer_t *buf;

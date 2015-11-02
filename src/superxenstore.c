@@ -146,7 +146,7 @@ xenstore_dev_bepath(dominfo_t *domp, char *type, int devnum)
  *
  * @return 0 on success, -ENOENT on failure
  */
-int
+static int
 superxenstore_get_dominfo(int domid, dominfo_t *di)
 {
   di->di_domid = domid;

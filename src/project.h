@@ -290,25 +290,18 @@ int input_grabber;
 void superhid_init(void);
 int  superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type type);
 int  superxenstore_init(void);
-int  superxenstore_get_dominfo(int domid, dominfo_t *di);
 int  superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
 int  superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp);
 void superxenstore_handler(void);
 void superxenstore_close(void);
 int  superbackend_init(void);
-xen_backend_t superbackend_add(dominfo_t di, struct superhid_backend *superback);
 void superbackend_send(struct superhid_device *device, usbif_response_t *rsp);
 int  superbackend_find_slot(int domid);
-int  superbackend_find_free_slot(void);
 int  superbackend_create(dominfo_t di);
 bool superbackend_all_pending(struct superhid_backend *superback);
 void superbackend_send_report_to_frontends(int fd,
                                            struct superhid_report *report,
                                            struct superhid_backend *superback);
-int  superplugin_callback(struct superhid_backend *superback,
-                          int fd,
-                          struct superhid_finger *finger,
-                          struct superhid_report *report);
 int  superplugin_create(struct superhid_backend *superback);
 
 #endif 	    /* !PROJECT_H_ */
