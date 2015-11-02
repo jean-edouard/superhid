@@ -414,7 +414,6 @@ int superhid_setup(struct usb_ctrlrequest *setup, void *buf, enum superhid_type 
   __u16 value, length;
   struct feature_report feature;
   int total;
-  char *tmp;
 
   value = setup->wValue;
   length = setup->wLength;

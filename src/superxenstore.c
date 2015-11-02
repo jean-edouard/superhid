@@ -104,54 +104,6 @@ xenstore_add_dir(xs_transaction_t xt, char *path, int d0, int p0, int d1, int p1
 }
 
 /**
- * Read the xenstore node of a specific VM (/local/domain/<domid>/<path>)
- *
- * @param domid The domid of the VM
- * @param format The printf format of the subpath to read, followed by
- *        the format parameters
- *
- * @return The value of the key if found, NULL otherwise
- */
-static char*
-xenstore_dom_read(unsigned int domid, const char *format, ...)
-{
-  char *domain_path;
-  va_list arg;
-  char *ret = NULL;
-  char *buff = NULL;
-  int res;
-
-  domain_path = xs_get_domain_path(xs_handle, domid);
-
-  if (!domain_path)
-    return NULL;
-
-  buff = xasprintf("%s/%s", domain_path, format);
-  free(domain_path);
-
-  if (res == -1)
-    return NULL;
-
-  va_start(arg, format);
-  ret = xs_read(xs_handle, XBT_NULL, buff, NULL);
-  va_end(arg);
-
-  free(buff);
-
-  return ret;
-}
-
-static char*
-xenstore_get_keyval(char *path, char *key)
-{
-  char tmppath[256];
-
-  snprintf(tmppath, sizeof(tmppath), "%s/%s", path, key);
-
-  return xs_read(xs_handle, XBT_NULL, tmppath, NULL);
-}
-
-/**
  * Write a single value into Xenstore.
  */
 static int
@@ -298,7 +250,6 @@ wait_for_states(char *bepath, char *fepath, enum XenBusStates a, enum XenBusStat
   char *bstate, *fstate;
   int bstatelen, fstatelen;
   char *buf;
-  int bwatch, fwatch;
   int fd;
   struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
   int ret = -1;
@@ -309,14 +260,14 @@ wait_for_states(char *bepath, char *fepath, enum XenBusStates a, enum XenBusStat
   fstate = malloc(fstatelen);
   snprintf(bstate, bstatelen, "%s/state", bepath);
   snprintf(fstate, fstatelen, "%s/state", fepath);
-  bwatch = xs_watch(xs_handle, bstate, bstate);
-  fwatch = xs_watch(xs_handle, fstate, fstate);
+  xs_watch(xs_handle, bstate, bstate);
+  xs_watch(xs_handle, fstate, fstate);
   fd = xs_fileno(xs_handle);
   while (tv.tv_sec != 0 || tv.tv_usec != 0)
   {
     int bs, fs;
     fd_set set;
-    int len;
+    unsigned int len;
     char **watch_paths;
 
     FD_ZERO(&set);
@@ -395,7 +346,6 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
   char value[32];
   char *bepath;
   char *fepath;
-  int i;
   int ret;
 
   xd_log(LOG_INFO, "Deleting VUSB node %d for %d.%d",
@@ -441,8 +391,7 @@ static void spawn(int domid, enum superhid_type type)
 {
   usbinfo_t ui;
   dominfo_t di;
-  int superfd;
-  int i, ret;
+  int ret;
   int slot;
 
   /* Fill the domain info */
@@ -480,7 +429,8 @@ static void spawn(int domid, enum superhid_type type)
  */
 void superxenstore_handler(void)
 {
-  int i, n, len;
+  int i;
+  unsigned int n, len;
   char **paths;
   char path[256] = { 0 };
   char *state, *value, *type;

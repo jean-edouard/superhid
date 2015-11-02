@@ -55,7 +55,6 @@ static void print_setup(struct usb_ctrlrequest *setup)
 
 void consume_requests(struct superhid_device *dev)
 {
-  RING_IDX rc, rp;
   usbif_request_t req;
   usbif_response_t rsp;
   int responded;
@@ -63,7 +62,7 @@ void consume_requests(struct superhid_device *dev)
   void *buf = NULL;
   uint64_t tocancel;
   int i;
-  int domids[32];
+  uint32_t domids[32];
 
   if (dev->back_ring_ready != 1) {
     xd_log(LOG_ERR, "Backend not ready to consume");
@@ -107,6 +106,7 @@ void consume_requests(struct superhid_device *dev)
     case USBIF_T_INT: /* Interrupt request. Pend it. */
       xd_log(LOG_DEBUG, "%d: pendings[%d]=%"PRIu64, dev->devid, dev->pendingtail, req.id);
       dev->pendings[dev->pendingtail] = req.id;
+      /* TODO: FIXME: handle multiple grefs! */
       dev->pendingrefs[dev->pendingtail] = req.u.gref[0];
       dev->pendingoffsets[dev->pendingtail] = req.offset;
       dev->pendingtail = (dev->pendingtail + 1) % 32;
@@ -134,7 +134,7 @@ void consume_requests(struct superhid_device *dev)
       break;
     case USBIF_T_CANCEL: /* (internal) Cancel request. Cancel the
                           * requested pending request and reply. */
-      tocancel = *((uint64_t*)&req.u.data[0]);
+      memcpy(&tocancel, req.u.data, 4);
       for (i = dev->pendinghead; i != dev->pendingtail; i = (i + 1) % 32)
         if (dev->pendings[i] == tocancel)
           break;
@@ -219,8 +219,6 @@ static int
 superback_connect(xen_device_t xendev)
 {
   struct superhid_device *dev = xendev;
-  char path[256];
-  char *res;
 
   /* printf("connect %p\n", xendev); */
 
@@ -348,8 +346,6 @@ static struct xen_backend_ops superback_ops = {
 
 int superbackend_init(void)
 {
-  int i;
-
   memset(superbacks, 0, sizeof(struct superhid_backend) * SUPERHID_MAX_BACKENDS);
 
   if (backend_init(SUPERHID_DOMID)) {

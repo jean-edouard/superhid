@@ -146,7 +146,7 @@ enum superhid_type
 
 struct superhid_device
 {
-  unsigned char            devid;
+  uint8_t                  devid;
   xen_backend_t            backend;
   struct superhid_backend *superback;
   void                    *page;
@@ -154,11 +154,11 @@ struct superhid_device
   unsigned int             back_ring_ready:1;
   int                      evtfd;
   void                    *priv;
-  char                     pendings[32]; /* -1 <= slot <= 31 */
-  int                      pendingrefs[32];
-  int                      pendingoffsets[32];
-  char                     pendinghead;
-  char                     pendingtail;
+  uint64_t                 pendings[32];       /* usbif_request_t.id */
+  grant_ref_t              pendingrefs[32];    /* usbif_request_t.u.gref */
+  uint16_t                 pendingoffsets[32]; /* usbif_request_t.offset */
+  uint8_t                  pendinghead;
+  uint8_t                  pendingtail;
   struct event             event;
   enum superhid_type       type;
 };

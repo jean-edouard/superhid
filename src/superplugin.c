@@ -60,16 +60,6 @@ struct event_record
   uint32_t ivalue;
 } __attribute__ ((__packed__));
 
-/* Some OSes swap the x,y coordinates for some reason... */
-static uint16_t swap_bytes(uint16_t n)
-{
-  uint16_t res;
-
-  res = ((n << 8) & 0xFF00) + (n >> 8);
-
-  return res;
-}
-
 static uint8_t find_scancode(uint8_t keycode)
 {
   int i = 0;
@@ -122,7 +112,7 @@ static uint8_t find_modifier(uint8_t keycode)
 static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, uint32_t ivalue,
                                    struct superhid_finger *res, struct superhid_report *report)
 {
-  static struct superhid_finger fingers[MAX_FINGERS] = { 0 };
+  static struct superhid_finger fingers[MAX_FINGERS] = { { 0 } };
   static struct superhid_report_tablet tablet = { 0 };
   static struct superhid_report_keyboard keyboard = { 0 };
   static struct superhid_report_mouse mouse = { 0 };
@@ -396,7 +386,6 @@ int superplugin_callback(struct superhid_backend *superback,
   int n = 0;
   struct buffer_t *buf;
   char *b;
-  size_t nbytes = 0;
 
   buf = &superback->buffers;
   b = buf->buffer;
@@ -462,9 +451,6 @@ static void input_handler(int fd, short event, void *priv)
   struct superhid_finger *finger;
   int remaining = EVENT_SIZE;
   int sents = 0;
-  int domid;
-
-  domid = superback->di.di_domid;
 
   /* We send a maximum of 2 packets, because that's usually how
    * many pending INT requests we have. */
@@ -514,10 +500,8 @@ static void input_handler(int fd, short event, void *priv)
  */
 int superplugin_create(struct superhid_backend *superback)
 {
-  int s, t, len;
+  int s, len;
   struct sockaddr_un remote;
-  char str[100];
-  pthread_t output_thread_var;
   int domid;
   struct event *input_event;
 
