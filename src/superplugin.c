@@ -138,7 +138,6 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     switch (icode)
     {
     case REL_X:
-      printf("REL_X %d\n", ivalue);
       mouse.report_id = REPORT_ID_MOUSE;
       mouse.x = ivalue;
       break;
@@ -165,7 +164,6 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     case ABS_X:
       /* Sometimes we get ABS_X events from digitizers... */
       if (multitouch_dev == -42 || dev_set != multitouch_dev) {
-        printf("ABS_X %d\n", ivalue);
         tablet.report_id = REPORT_ID_TABLET;
         tablet.x = ivalue;
       }
