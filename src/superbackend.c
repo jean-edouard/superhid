@@ -134,7 +134,7 @@ static void consume_requests(struct superhid_device *dev)
       break;
     case USBIF_T_CANCEL: /* (internal) Cancel request. Cancel the
                           * requested pending request and reply. */
-      memcpy(&tocancel, req.u.data, 4);
+      tocancel = req.u.data[0];
       for (i = dev->pendinghead; i != dev->pendingtail; i = (i + 1) % 32)
         if (dev->pendings[i] == tocancel)
           break;

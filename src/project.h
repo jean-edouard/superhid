@@ -30,6 +30,8 @@
 #ifndef   	PROJECT_H_
 # define   	PROJECT_H_
 
+/* #define DEBUG */
+
 #include "config.h"
 
 #ifdef TM_IN_SYS_TIME
@@ -93,12 +95,10 @@
 
 #include "usbif.h"
 
-/* #define DEBUG */
-
 #define EVENT_SIZE             12
 
 #define SUPERHID_VM_TYPE       "svm"
-#define SUPERHID_NAME          "vusb"
+#define SUPERHID_NAME          "vhid"
 #define SUPERHID_REAL_NAME     "SuperHID"
 #define SUPERHID_VENDOR        0x4242
 #define SUPERHID_DEVICE        0x4242
@@ -242,8 +242,8 @@ struct superhid_report_tablet
   BIT_FIELD placeholder:5;
   uint16_t  x;              /* Absolute position on the X axis */
   uint16_t  y;              /* Absolute position on the Y axis */
-  int8_t    wheel;          /* Vertical scroll wheel. NOT USED */
-  uint8_t   pad[SUPERHID_REPORT_LENGTH - 7];
+  /* int8_t    wheel;          /\* Vertical scroll wheel. NOT USED *\/ */
+  uint8_t   pad[SUPERHID_REPORT_LENGTH - 6];
 } __attribute__ ((__packed__));
 
 struct superhid_report_keyboard

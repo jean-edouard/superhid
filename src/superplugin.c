@@ -138,6 +138,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     switch (icode)
     {
     case REL_X:
+      printf("REL_X %d\n", ivalue);
       mouse.report_id = REPORT_ID_MOUSE;
       mouse.x = ivalue;
       break;
@@ -153,6 +154,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       printf("%d REL?\n", icode);
       break;
     }
+    break;
   case EV_ABS:
     switch (icode)
     {
@@ -163,6 +165,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     case ABS_X:
       /* Sometimes we get ABS_X events from digitizers... */
       if (multitouch_dev == -42 || dev_set != multitouch_dev) {
+        printf("ABS_X %d\n", ivalue);
         tablet.report_id = REPORT_ID_TABLET;
         tablet.x = ivalue;
       }
@@ -257,7 +260,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       if (tablet.report_id == REPORT_ID_TABLET) {
         memcpy(report, &tablet, sizeof(*report));
         tablet.report_id = 0;
-        tablet.wheel = 0;
+        /* tablet.wheel = 0; */
       } else if (keyboard.report_id == REPORT_ID_KEYBOARD) {
         memcpy(report, &keyboard, sizeof(*report));
         keyboard.report_id = 0;
@@ -277,6 +280,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       printf("%d SYN?\n", icode);
       break;
     }
+    break;
   case EV_MSC:
     switch (icode)
     {

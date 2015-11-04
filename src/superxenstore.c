@@ -169,14 +169,14 @@ superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp)
   char value[32];
   xs_transaction_t trans;
 
-  superlog(LOG_DEBUG, "Creating VUSB node for %d.%d",
+  superlog(LOG_DEBUG, "Creating " SUPERHID_NAME " node for %d.%d",
          usbp->usb_bus, usbp->usb_device);
 
   /*
    * Construct Xenstore paths for both the front and back ends.
    */
-  fepath = xenstore_dev_fepath(domp, "vusb", usbp->usb_virtid);
-  bepath = xenstore_dev_bepath(domp, "vusb", usbp->usb_virtid);
+  fepath = xenstore_dev_fepath(domp, SUPERHID_NAME, usbp->usb_virtid);
+  bepath = xenstore_dev_bepath(domp, SUPERHID_NAME, usbp->usb_virtid);
 
   for (;;) {
     trans = xs_transaction_start(xs_handle);
@@ -328,8 +328,8 @@ superxenstore_wait_for_offline(dominfo_t *di, usbinfo_t *ui)
   char *bepath, *fepath;
   int ret;
 
-  bepath = xenstore_dev_bepath(di, "vusb", ui->usb_virtid);
-  fepath = xenstore_dev_fepath(di, "vusb", ui->usb_virtid);
+  bepath = xenstore_dev_bepath(di, SUPERHID_NAME, ui->usb_virtid);
+  fepath = xenstore_dev_fepath(di, SUPERHID_NAME, ui->usb_virtid);
   ret = wait_for_states(bepath, fepath, XB_UNKNOWN, XB_CLOSED);
   free(bepath);
   free(fepath);
@@ -348,11 +348,11 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
   char *fepath;
   int ret;
 
-  superlog(LOG_INFO, "Deleting VUSB node %d for %d.%d",
+  superlog(LOG_INFO, "Deleting " SUPERHID_NAME " node %d for %d.%d",
          usbp->usb_virtid, usbp->usb_bus, usbp->usb_device);
 
-  bepath = xenstore_dev_bepath(domp, "vusb", usbp->usb_virtid);
-  fepath = xenstore_dev_fepath(domp, "vusb", usbp->usb_virtid);
+  bepath = xenstore_dev_bepath(domp, SUPERHID_NAME, usbp->usb_virtid);
+  fepath = xenstore_dev_fepath(domp, SUPERHID_NAME, usbp->usb_virtid);
 
   /* Notify the backend that the device is being shut down */
   xenstore_set_keyval(XBT_NULL, bepath, "online", "0");
@@ -476,12 +476,12 @@ void superxenstore_handler(void)
         if (slot == -1) {
           /* There's a new VM, let's create a backend for it */
           /* if (*type == 'm') { */
-            spawn(domid, SUPERHID_TYPE_MULTI);
+            /* spawn(domid, SUPERHID_TYPE_MULTI); */
           /* } else { */
-          /* spawn(domid, SUPERHID_TYPE_MOUSE); */
-          /* spawn(domid, SUPERHID_TYPE_DIGITIZER); */
-          /* spawn(domid, SUPERHID_TYPE_TABLET); */
-          /* spawn(domid, SUPERHID_TYPE_KEYBOARD); */
+          spawn(domid, SUPERHID_TYPE_MOUSE);
+          spawn(domid, SUPERHID_TYPE_DIGITIZER);
+          spawn(domid, SUPERHID_TYPE_TABLET);
+          spawn(domid, SUPERHID_TYPE_KEYBOARD);
           /* } */
         }
       }
