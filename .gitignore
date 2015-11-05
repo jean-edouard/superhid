@@ -18,3 +18,4 @@ config.h
 config.h.in
 src/stamp-h1
 src/superhid
+doxygen/

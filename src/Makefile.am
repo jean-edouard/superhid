@@ -16,39 +16,17 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 
-DBUS_CLIENT_IDLS = xenmgr_vm
-
-AM_CFLAGS = -finput-charset=UTF-8 -std=gnu99 -DROOT_UID=0 -DHAVE_ARCH_STRUCT_FLOCK -DUSE_DBUS -DHAVE_ARCH_STRUCT_FLOCK
+AM_CFLAGS = -finput-charset=UTF-8 -std=gnu99 -DROOT_UID=0 -DHAVE_ARCH_STRUCT_FLOCK -DUSE_DBUS -DHAVE_ARCH_STRUCT_FLOCK -Wall -Werror
 
 # Add @LIBXCXENSTORE_CFLAGS@ for libxcxenstore
-INCLUDES = @DBUS_CFLAGS@ @DBUS_GLIB_CFLAGS@ @LIBXCDBUS_INC@ @LIBV4V_INC@ @LIBUSB_CFLAGS@ @LIBEXPAT_INC@ @UDEV_CFLAGS@
+INCLUDES = @DBUS_CFLAGS@ @DBUS_GLIB_CFLAGS@ @LIBV4V_INC@ @LIBUSB_CFLAGS@ @LIBEXPAT_INC@ @UDEV_CFLAGS@
 
 sbin_PROGRAMS = superhid
 
-PROTO_SRCS = main.c superplugin.c
+PROTO_SRCS = main.c superplugin.c superhid.c superxenstore.c superbackend.c
 
 superhid_SOURCES = ${PROTO_SRCS}
 
 # Add -lusb-1.0 for a decent usb lib
 # Add @LIBXCXENSTORE_LIBS@ for libxcxenstore
-superhid_LDADD = @LIBEXPAT_LIB@ @DBUS_LIBS@ @DBUS_GLIB_LIBS@ @LIBXCDBUS_LIBS@ @UDEV_LIBS@ -lusb -levent -lxenstore -lxenbackend -lxenctrl
-
-BUILT_SOURCES = \
-        ${DBUS_CLIENT_IDLS:%=rpcgen/%_client.h} \
-        ${DBUS_SERVER_IDLS:%=rpcgen/%_server_marshall.h} \
-        ${DBUS_SERVER_IDLS:%=rpcgen/%_server_obj.c} \
-        ${DBUS_SERVER_IDLS:%=rpcgen/%_server_obj.h}
-
-
-rpcgen/%_client.h: ${IDLDIR}/%.xml
-	mkdir rpcgen || true
-	${XC_RPCGEN} -c -o rpcgen/ $<
-
-rpcgen/%_server_marshall.h rpcgen/%_server_obj.h rpcgen/%_server_obj.c : ${IDLDIR}/%.xml
-	mkdir rpcgen || true
-	${XC_RPCGEN} -s -o rpcgen/ $<
-
-protos: ${BUILD_SOURCES}
-	echo > prototypes.h
-	cproto -E "${CPP} ${CPPFLAGS}" ${INCLUDES} -I. -DPROTOS -v -e ${PROTO_SRCS} > prototypes.tmp
-	mv prototypes.tmp prototypes.h
+superhid_LDADD = @LIBEXPAT_LIB@ @DBUS_LIBS@ @DBUS_GLIB_LIBS@ @UDEV_LIBS@ -lusb -levent -lxenstore -lxenbackend -lxenctrl
