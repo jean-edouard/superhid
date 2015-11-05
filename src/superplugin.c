@@ -150,7 +150,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       mouse.wheel = ivalue;
       break;
     default:
-      printf("%d REL?\n", icode);
+      superlog(LOG_DEBUG, "%d REL?", icode);
       break;
     }
     break;
@@ -204,7 +204,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       }
       break;
     default:
-      printf("%d ABS?\n", icode);
+      superlog(LOG_DEBUG, "%d ABS?", icode);
       break;
     }
     break;
@@ -247,7 +247,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
             keyboard.keycode[0] = 0;
         }
       } else
-        printf("%d KEY?\n", icode);
+        superlog(LOG_DEBUG, "%d KEY?", icode);
       break;
     }
     break;
@@ -271,11 +271,11 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
       just_syned = 1;
       /* re-init */
       /* Nothing to do? */
-      superlog(LOG_DEBUG, "SYN_REPORT\n");
+      superlog(LOG_DEBUG, "SYN_REPORT");
       return;
       break;
     default:
-      printf("%d SYN?\n", icode);
+      superlog(LOG_DEBUG, "%d SYN?", icode);
       break;
     }
     break;
@@ -288,7 +288,7 @@ static void process_absolute_event(int dev_set, uint16_t itype, uint16_t icode, 
     }
     break;
   default:
-    printf("%d %d?\n", itype, icode);
+    superlog(LOG_DEBUG, "Event type=%d code=%d?", itype, icode);
     break;
   }
 
@@ -313,9 +313,9 @@ static void process_event(struct event_record *r,
   {
     if (icode == DEV_SET) {
       dev_set = ivalue;
-      printf("DEV_SET %d\n", dev_set);
+      superlog(LOG_DEBUG, "DEV_SET %d", dev_set);
     } else {
-      printf("EV_DEV %d %d?\n", icode, ivalue);
+      superlog(LOG_DEBUG, "EV_DEV %d %d?", icode, ivalue);
     }
     return;
   }
@@ -348,14 +348,14 @@ static struct event_record *findnext(struct buffer_t *b)
   while (b->bytes_remaining >= EVENT_SIZE &&
          (r = (struct event_record *) &b->buffer[b->position]) && r->magic != MAGIC)
   {
-    printf("SKIPPED!\n");
+    superlog(LOG_DEBUG, "Junk skipped from input_server buffer");
     sleep(1);
     b->bytes_remaining--;
     b->position++;
   }
 
   if (start != b->position)
-    printf ("Warning: Encountered %d bytes of junk.\n", b->position - start);
+    superlog(LOG_DEBUG, "Warning: Encountered %d bytes of junk.", b->position - start);
 
   if (b->bytes_remaining >= EVENT_SIZE)
   {
@@ -401,7 +401,7 @@ static int superplugin_callback(struct superhid_backend *superback,
     n = recv(fd, &b[buf->bytes_remaining], buffersize - buf->bytes_remaining, 0);
 
   if (n < 0) {
-    superlog(LOG_ERR, "FAILED TO READ THE FD\n");
+    superlog(LOG_ERR, "FAILED TO READ THE FD");
     perror("recv");
     return buf->bytes_remaining;
   }
@@ -521,7 +521,7 @@ int superplugin_create(struct superhid_backend *superback)
     exit(1);
   }
 
-  printf("Trying to grab events for domid %d...\n", domid);
+  superlog(LOG_DEBUG, "Trying to grab events for domid %d...", domid);
 
   remote.sun_family = AF_UNIX;
   strcpy(remote.sun_path, SOCK_PATH);
@@ -532,8 +532,6 @@ int superplugin_create(struct superhid_backend *superback)
     exit(1);
   }
 
-  printf("Grabbed.\n");
-
   superback->buffers.bytes_remaining = 0;
   superback->buffers.position = 0;
   superback->buffers.copy = 0;
@@ -541,6 +539,8 @@ int superplugin_create(struct superhid_backend *superback)
   superback->buffers.s = s;
 
   suck(s, domid);
+
+  superlog(LOG_INFO, "Input events for domid %d are now going through SuperHID", domid);
 
   input_event = &superback->input_event;
   event_set(input_event, s, EV_READ | EV_PERSIST,

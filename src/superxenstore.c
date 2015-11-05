@@ -405,11 +405,6 @@ static void spawn(int domid, enum superhid_type type)
   if (slot == -1) {
     /* There's no backend for this domain yet, let's create one */
     slot = superbackend_create(di);
-    /* Grab input events for the domain */
-    if (superplugin_create(&superbacks[slot]) != 0) {
-      superlog(LOG_ERR, "Failed to grab events for %d", domid);
-      return;
-    }
   }
 
   /* Fill the device info */

@@ -421,7 +421,7 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
   switch ((setup->bRequestType << 8) | setup->bRequest) {
   case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_GET_REPORT):
-    printf("INTERFACE GET REPORT\n");
+    superlog(LOG_DEBUG, "INTERFACE GET REPORT");
     if ((value >> 8) == HID_REPORT_TYPE_FEATURE) {
       if ((value & 0xFF) == REPORT_ID_MT_MAX_COUNT)
       {
@@ -439,24 +439,24 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
       /*   memset(buf + 2, 0x00, 1); */
       /*   goto respond; */
       /* } */ else {
-        printf("Unknown feature request 0x%x\n", value & 0xFF);
+        superlog(LOG_DEBUG, "Unknown feature request 0x%x", value & 0xFF);
         goto stall;
       }
     } else {
-      printf("Unknown feature request TYPE 0x%x\n", value >> 8);
+      superlog(LOG_DEBUG, "Unknown feature request TYPE 0x%x", value >> 8);
       goto stall;
     }
     break;
 
   case ((USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_GET_PROTOCOL):
-    printf("INTERFACE GET PROTOCOL\n");
+    superlog(LOG_DEBUG, "INTERFACE GET PROTOCOL");
     goto stall;
     break;
 
   case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_SET_REPORT):
-    printf("INTERFACE SET REPORT\n");
+    superlog(LOG_DEBUG, "INTERFACE SET REPORT");
     if ((value >> 8) == HID_REPORT_TYPE_FEATURE) {
       /* Un-comment this to add support for the "Device mode" HID
        * usage (0x52) */
@@ -470,30 +470,30 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
       /*   memset(buf + 2, 0x00, 1); */
       /*   goto respond; */
       /* } else { */
-        printf("Unknown feature SET request 0x%x\n", value & 0xFF);
+        superlog(LOG_DEBUG, "Unknown feature SET request 0x%x", value & 0xFF);
         goto stall;
       /* } */
     } else {
-      printf("Unknown feature SET request TYPE 0x%x\n", value >> 8);
+      superlog(LOG_DEBUG, "Unknown feature SET request TYPE 0x%x", value >> 8);
       goto stall;
     }
     break;
 
   case ((USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE) << 8
         | HID_REQ_SET_PROTOCOL):
-    printf("INTERFACE SET PROTOCOL\n");
+    superlog(LOG_DEBUG, "INTERFACE SET PROTOCOL");
     goto stall;
     break;
 
   case ((USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
         | USB_REQ_GET_STATUS):
-    printf("DEVICE_GET_STATUS\n");
+    superlog(LOG_DEBUG, "DEVICE_GET_STATUS");
     goto respond;
     break;
 
   case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
         | USB_REQ_GET_DESCRIPTOR):
-    printf("DEVICE GET DESCRIPTOR\n");
+    superlog(LOG_DEBUG, "DEVICE GET DESCRIPTOR");
     switch (value >> 8) {
     case USB_DT_DEVICE:
       if (sizeof(device_desc) < length)
@@ -513,14 +513,14 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
       total += sizeof(config_desc);
       printf("%d ", total);
       if (total > length) {
-        printf("skipping interface\n");
+        superlog(LOG_DEBUG, "skipping interface");
         goto skipstuffs;
       }
       memcpy(buf + total, &interface_desc, sizeof(interface_desc));
       total += sizeof(interface_desc);
       printf("%d ", total);
       if (total > length) {
-        printf("skipping hid\n");
+        superlog(LOG_DEBUG, "skipping hid");
         goto skipstuffs;
       }
       switch (type) {
@@ -547,14 +547,14 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
       }
       printf("%d ", total);
       if (total > length) {
-        printf("skipping endpoint 1\n");
+        superlog(LOG_DEBUG, "skipping endpoint 1");
         goto skipstuffs;
       }
       memcpy(buf + total, &endpoint_in_desc, USB_DT_ENDPOINT_SIZE);
       total += USB_DT_ENDPOINT_SIZE;
       printf("%d ", total);
       if (total > length) {
-        printf("skipping endpoint 2\n");
+        superlog(LOG_DEBUG, "skipping endpoint 2");
         goto skipstuffs;
       }
       /* Un-comment this if an OUT endpoint is needed */
@@ -592,33 +592,33 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
     break;
   case ((USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
         | USB_REQ_SET_CONFIGURATION):
-    printf("DEVICE SET CONFIGURATION\n");
+    superlog(LOG_DEBUG, "DEVICE SET CONFIGURATION");
     length = 0;
     goto respond;
     break;
   case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_DEVICE) << 8
         | USB_REQ_GET_CONFIGURATION):
-    printf("DEVICE GET CONFIGURATION\n");
+    superlog(LOG_DEBUG, "DEVICE GET CONFIGURATION");
     length = 1;
     memcpy(buf, "1", length);
     goto respond;
     break;
   case ((USB_DIR_OUT | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) << 8
         | USB_REQ_SET_INTERFACE):
-    printf("DEVICE SET INTERFACE\n");
+    superlog(LOG_DEBUG, "DEVICE SET INTERFACE");
     length = 0;
     goto respond;
     break;
   case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) << 8
         | USB_REQ_GET_INTERFACE):
-    printf("DEVICE GET INTERFACE\n");
+    superlog(LOG_DEBUG, "DEVICE GET INTERFACE");
     length = 1;
     memcpy(buf, "0", length);
     goto respond;
     break;
   case ((USB_DIR_IN | USB_TYPE_STANDARD | USB_RECIP_INTERFACE) << 8
         | USB_REQ_GET_DESCRIPTOR):
-    printf("INTERFACE GET DESCRIPTOR\n");
+    superlog(LOG_DEBUG, "INTERFACE GET DESCRIPTOR");
     switch (value >> 8) {
     case HID_DT_HID:
       if (hid_desc.bLength < length)
@@ -658,22 +658,20 @@ int superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type 
       break;
 
     default:
-      printf("Unknown descriptor request 0x%x\n",
-             value >> 8);
+      superlog(LOG_DEBUG, "Unknown descriptor request 0x%x", value >> 8);
       goto stall;
       break;
     }
     break;
 
   default:
-    printf("Unknown request 0x%x\n",
-           setup->bRequest);
+    superlog(LOG_DEBUG, "Unknown request 0x%x", setup->bRequest);
     goto stall;
     break;
   }
 
 stall:
-  printf("STALL\n");
+  superlog(LOG_DEBUG, "STALL");
   return -1;
 
 respond:

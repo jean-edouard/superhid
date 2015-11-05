@@ -174,7 +174,7 @@ static void consume_requests(struct superhid_device *dev)
 
     dev->back_ring.req_cons++;
 
-    superlog(LOG_DEBUG, "***********************\n");
+    superlog(LOG_DEBUG, "***********************");
   }
 }
 
@@ -223,22 +223,33 @@ superback_connect(xen_device_t xendev)
 
   /* printf("connect %p\n", xendev); */
 
+  /* Bind the event channel */
   dev->evtfd = backend_bind_evtchn(dev->backend, dev->devid);
   dev->priv = backend_evtchn_priv(dev->backend, dev->devid);
   if (dev->evtfd < 0) {
-    printf("failed to bind evtchn\n");
+    superlog(LOG_ERR, "Failed to bind evtchn for domid %d", dev->superback->di.di_domid);
     return -1;
   }
 
+  /* Map the grant ref */
   dev->page = backend_map_granted_ring(dev->backend, dev->devid);
   if (!dev->page) {
-    printf("failed to map page\n");
+    superlog(LOG_ERR, "Failed to map page for domid %d", dev->superback->di.di_domid);
     return -1;
   }
 
+  /* Start grabbing the input events for the domain. After this,
+   * input_server will send the events to us instead of the qemu/xenmou. */
+  if (dev->superback->buffers.s == 0 && superplugin_create(dev->superback) != 0) {
+    superlog(LOG_ERR, "Failed to grab events for domid %d", dev->superback->di.di_domid);
+    return -1;
+  }
+
+  /* Initialize the ring management macros */
   BACK_RING_INIT(&dev->back_ring, (usbif_sring_t *)dev->page, XC_PAGE_SIZE);
   dev->back_ring_ready = true;
 
+  /* Start monitoring the event channel */
   event_set(&dev->event, dev->evtfd, EV_READ | EV_PERSIST,
             superback_evtchn_handler,
             backend_evtchn_priv(dev->backend, dev->devid));
@@ -261,7 +272,7 @@ superback_disconnect(xen_device_t xendev)
   /* Also this function seems to get called with bogus values after a
    * backend got killed... */
   if (dev != NULL && dev->priv != NULL && dev->devid > 0 && dev->devid < 6) {
-    superlog(LOG_INFO, "disconnect %d\n", dev->devid);
+    superlog(LOG_INFO, "disconnect %d", dev->devid);
     event_del(&dev->event);
     backend_unbind_evtchn(dev->backend, dev->devid);
     ui.usb_virtid = dev->type;
@@ -434,7 +445,7 @@ int superbackend_create(dominfo_t di)
 
   slot = superbackend_find_free_slot();
   if (slot == -1) {
-    superlog(LOG_ERR, "Can't create a backend for domid %d, we're full!\n", di.di_domid);
+    superlog(LOG_ERR, "Can't create a backend for domid %d, we're full!", di.di_domid);
     return -1;
   }
 
@@ -533,5 +544,5 @@ void superbackend_send_report_to_frontends(struct superhid_report *report,
     }
   }
 
-  superlog(LOG_ERR, "COULD NOT SEND REPORT %d\n", report->report_id);
+  superlog(LOG_ERR, "COULD NOT SEND REPORT %d", report->report_id);
 }
