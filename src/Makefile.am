@@ -18,8 +18,7 @@
 
 AM_CFLAGS = -finput-charset=UTF-8 -std=gnu99 -DROOT_UID=0 -DHAVE_ARCH_STRUCT_FLOCK -DUSE_DBUS -DHAVE_ARCH_STRUCT_FLOCK -Wall -Werror
 
-# Add @LIBXCXENSTORE_CFLAGS@ for libxcxenstore
-INCLUDES = @DBUS_CFLAGS@ @DBUS_GLIB_CFLAGS@ @LIBV4V_INC@ @LIBUSB_CFLAGS@ @LIBEXPAT_INC@ @UDEV_CFLAGS@
+INCLUDES = 
 
 sbin_PROGRAMS = superhid
 
@@ -27,6 +26,4 @@ PROTO_SRCS = main.c superplugin.c superhid.c superxenstore.c superbackend.c
 
 superhid_SOURCES = ${PROTO_SRCS}
 
-# Add -lusb-1.0 for a decent usb lib
-# Add @LIBXCXENSTORE_LIBS@ for libxcxenstore
-superhid_LDADD = @LIBEXPAT_LIB@ @DBUS_LIBS@ @DBUS_GLIB_LIBS@ @UDEV_LIBS@ -lusb -levent -lxenstore -lxenbackend -lxenctrl
+superhid_LDADD = -levent -lxenstore -lxenbackend -lxenctrl

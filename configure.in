@@ -54,14 +54,6 @@ AC_FUNC_MALLOC
 AC_C_INLINE
 AC_C_CONST
 
-PKG_CHECK_MODULES([LIBUSB], [libusb])
-PKG_CHECK_MODULES([DBUS],[dbus-1])
-PKG_CHECK_MODULES([DBUS_GLIB],[dbus-glib-1])
-PKG_CHECK_MODULES([LIBV4V],[libv4v])
-PKG_CHECK_MODULES([UDEV],[libudev])
-# Uncomment this for libxcxenstore
-# PKG_CHECK_MODULES([LIBXCXENSTORE],[libxcxenstore])
-
 LIBV4V_CONFIG=no
 AC_ARG_WITH(libv4v,
         AC_HELP_STRING([--with-libv4v=PATH],[Path to libv4v-config]),
@@ -90,92 +82,47 @@ fi
 AC_SUBST(LIBV4V_INC)
 AC_SUBST(LIBV4V_LIB)
 
-
-AC_ARG_WITH(libexpat, 
-        AC_HELP_STRING([--with-libexpat=PATH],[Path to prefix where where libexpat and xen were installed]), 
-                LIBEXPAT_PREFIX=$with_libexpat,[]) 
- 
- 
-case "x$LIBEXPAT_PREFIX" in 
-        xno) 
-                LIBEXPAT_INC="" 
-                LIBEXPAT_LIB=-lexpat 
-                ;; 
-        xyes)  
-                LIBEXPAT_INC="" 
-                LIBEXPAT_LIB=-lexpat
-                ;; 
-        *) 
-                LIBEXPAT_INC="-I${LIBEXPAT_PREFIX}/include" 
-                LIBEXPAT_LIB="-L${LIBEXPAT_PREFIX}/lib -lexpat" 
-                ;; 
-esac 
- 
- 
-ORIG_LDFLAGS="${LDFLAGS}" 
-ORIG_CFLAGS="${CFLAGS}" 
- 
-        have_libexpat=true 
- 
-        LDFLAGS="${LDFLAGS} ${LIBEXPAT_LIB}"  
-        CFLAGS="${CFLAGS} ${LIBEXPAT_INC}"  
- 
-        AC_CHECK_HEADERS([expat.h],[],[have_libexpat=false]) 
-        AC_CHECK_FUNC(XML_SetElementHandler,[],[have_libexpat=false]) 
- 
-LDFLAGS="${ORIG_LDFLAGS}" 
-CFLAGS="${ORIG_CFLAGS}" 
- 
-if [ "x$have_libexpat" != "xtrue" ]; then 
-        AC_MSG_ERROR([no expat library found])
-fi 
- 
-AC_SUBST(LIBEXPAT_INC) 
-AC_SUBST(LIBEXPAT_LIB) 
- 
+AC_ARG_WITH(libxenstore,
+        AC_HELP_STRING([--with-libxenstore=PATH],[Path to prefix where where libxenstore and xen were installed]),
+                LIBXENSTORE_PREFIX=$with_libxenstore,[])
 
 
-AC_ARG_WITH(libxenstore, 
-        AC_HELP_STRING([--with-libxenstore=PATH],[Path to prefix where where libxenstore and xen were installed]), 
-                LIBXENSTORE_PREFIX=$with_libxenstore,[]) 
- 
- 
-case "x$LIBXENSTORE_PREFIX" in 
-        xno) 
-                LIBXENSTORE_INC="" 
+case "x$LIBXENSTORE_PREFIX" in
+        xno)
+                LIBXENSTORE_INC=""
                 LIBXENSTORE_LIB=-lxenstore
-                ;; 
-        xyes)  
-                LIBXENSTORE_INC="" 
+                ;;
+        xyes)
+                LIBXENSTORE_INC=""
                 LIBXENSTORE_LIB=-lxenstore
-                ;; 
-        *) 
-                LIBXENSTORE_INC="-I${LIBXENSTORE_PREFIX}/include" 
-                LIBXENSTORE_LIB="-L${LIBXENSTORE_PREFIX}/lib -lxenstore" 
-                ;; 
-esac 
- 
- 
-ORIG_LDFLAGS="${LDFLAGS}" 
-ORIG_CFLAGS="${CFLAGS}" 
- 
-        have_libxenstore=true 
- 
-        LDFLAGS="${LDFLAGS} ${LIBXENSTORE_LIB}"  
-        CFLAGS="${CFLAGS} ${LIBXENSTORE_INC}"  
- 
-        AC_CHECK_HEADERS([xs.h],[],[have_libxenstore=false]) 
-        AC_CHECK_FUNC(xs_read,[],[have_libxenstore=false]) 
- 
-LDFLAGS="${ORIG_LDFLAGS}" 
-CFLAGS="${ORIG_CFLAGS}" 
- 
-if [ "x$have_libxenstore" != "xtrue" ]; then 
+                ;;
+        *)
+                LIBXENSTORE_INC="-I${LIBXENSTORE_PREFIX}/include"
+                LIBXENSTORE_LIB="-L${LIBXENSTORE_PREFIX}/lib -lxenstore"
+                ;;
+esac
+
+
+ORIG_LDFLAGS="${LDFLAGS}"
+ORIG_CFLAGS="${CFLAGS}"
+
+        have_libxenstore=true
+
+        LDFLAGS="${LDFLAGS} ${LIBXENSTORE_LIB}"
+        CFLAGS="${CFLAGS} ${LIBXENSTORE_INC}"
+
+        AC_CHECK_HEADERS([xs.h],[],[have_libxenstore=false])
+        AC_CHECK_FUNC(xs_read,[],[have_libxenstore=false])
+
+LDFLAGS="${ORIG_LDFLAGS}"
+CFLAGS="${ORIG_CFLAGS}"
+
+if [ "x$have_libxenstore" != "xtrue" ]; then
         AC_MSG_ERROR([no xenstore library found])
-fi 
- 
-AC_SUBST(LIBXENSTORE_INC) 
-AC_SUBST(LIBXENSTORE_LIB) 
+fi
+
+AC_SUBST(LIBXENSTORE_INC)
+AC_SUBST(LIBXENSTORE_LIB)
 
 AC_ARG_WITH(idldir,AC_HELP_STRING([--with-idldir=PATH],[Path to dbus idl desription files]),
                 IDLDIR=$with_idldir,IDLDIR=/usr/share/idl)
