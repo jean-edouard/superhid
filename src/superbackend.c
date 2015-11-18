@@ -263,49 +263,9 @@ static void
 superback_disconnect(xen_device_t xendev)
 {
   struct superhid_device *dev = xendev;
-  usbinfo_t ui;
-  int i;
-  struct superhid_backend *kill = NULL;
 
-  /* Windows calls this at device creation for some reason. Let's
-   * bail if the device is not fully created... */
-  /* Also this function seems to get called with bogus values after a
-   * backend got killed... */
-  if (dev != NULL && dev->priv != NULL && dev->devid > 0 && dev->devid < 6) {
-    superlog(LOG_INFO, "disconnect %d", dev->devid);
-    event_del(&dev->event);
-    backend_unbind_evtchn(dev->backend, dev->devid);
-    ui.usb_virtid = dev->type;
-    ui.usb_bus = 1;
-    ui.usb_device = dev->type;
-    ui.usb_vendor = SUPERHID_VENDOR;
-    ui.usb_product = SUPERHID_DEVICE;
-    superxenstore_destroy_usb(&dev->superback->di, &ui);
-    kill = dev->superback;
-    for (i = 0; i < BACKEND_DEVICE_MAX; ++i) {
-      if (dev->superback->devices[i] == dev)
-        dev->superback->devices[i] = NULL;
-      if (dev->superback->devices[i] != NULL)
-        kill = NULL;
-    }
-    /* This should really be a call to backend_free_device() */
-    free(dev);
-  }
-
-  if (kill != NULL) {
-    /* No device use that backend anymore, kill it */
-    superlog(LOG_INFO, "KILLING THE BACKEND FOR DOMID %d", kill->di.di_domid);
-    /* This will call this function will all the devices it thinks
-     * are still alive... We need a backend_free_device() */
-    /* backend_release(kill->backend); */
-    if (kill->di.di_domid == input_grabber) {
-      close(kill->buffers.s);
-      /* superxenstore will do that when the VM is gone */
-      input_grabber = -input_grabber;
-      /* superlog(LOG_INFO, "DOMID %d no longer holds the input", kill->di.di_domid); */
-    }
-    memset(kill, 0, sizeof(struct superhid_backend));
-  }
+  if (dev != NULL)
+    superlog(LOG_DEBUG, "disconnect %d (doing nothing)", dev->devid);
 }
 
 static void superback_backend_changed(xen_device_t xendev,
@@ -335,12 +295,23 @@ static void
 superback_free(xen_device_t xendev)
 {
   struct superhid_device *dev = xendev;
+  usbinfo_t ui;
 
   /* This function seems to get called with bogus values on shutdown */
-  if (dev->devid > 0 && dev->devid < 6) {
-    printf("free %d\n", dev->devid);
-    superback_disconnect(xendev);
+  if (dev != NULL && dev->devid > 0 && dev->devid < 6 &&
+      dev->superback->devices[dev->devid] == dev) {
+    superlog(LOG_DEBUG, "free device %d", dev->devid);
     dev->superback->devices[dev->devid] = NULL;
+    backend_unmap_granted_ring(dev->backend, dev->devid, dev->page);
+    event_del(&dev->event);
+    backend_unbind_evtchn(dev->backend, dev->devid);
+    ui.usb_virtid = dev->type;
+    ui.usb_bus = 1;
+    ui.usb_device = dev->type;
+    ui.usb_vendor = SUPERHID_VENDOR;
+    ui.usb_product = SUPERHID_DEVICE;
+    /* This may trigger the libxenbackend xs_watch... */
+    superxenstore_destroy_usb(&dev->superback->di, &ui);
     free(dev);
   }
 }
@@ -545,4 +516,21 @@ void superbackend_send_report_to_frontends(struct superhid_report *report,
   }
 
   superlog(LOG_ERR, "COULD NOT SEND REPORT %d", report->report_id);
+}
+
+/**
+ * Finalize the release of a backend, which will un-watch and remove
+ * its xenstore nodes.
+ *
+ * @param slot The index of the backend in the superbacks list
+ */
+void superbackend_release(int slot)
+{
+  struct superhid_backend *superback;
+
+  superback = &superbacks[slot];
+  superplugin_release(superback);
+  backend_release(superback->backend);
+  superxenstore_destroy_backend(&superback->di);
+  memset(superback, 0, sizeof(*superback));
 }

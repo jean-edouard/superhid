@@ -138,6 +138,12 @@ xenstore_dev_bepath(dominfo_t *domp, char *type, int devnum)
                     domp->di_domid, devnum));
 }
 
+static char*
+xenstore_root_bepath(dominfo_t *domp, char *type)
+{
+  return (xasprintf("%s/backend/%s/%d", xs_dom0path, type, domp->di_domid));
+}
+
 /**
  * Fill the domain information for a given VM
  *
@@ -348,7 +354,7 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
   char *fepath;
   int ret;
 
-  superlog(LOG_INFO, "Deleting " SUPERHID_NAME " node %d for %d.%d",
+  superlog(LOG_DEBUG, "Deleting " SUPERHID_NAME " node %d for %d.%d",
          usbp->usb_virtid, usbp->usb_bus, usbp->usb_device);
 
   bepath = xenstore_dev_bepath(domp, SUPERHID_NAME, usbp->usb_virtid);
@@ -378,6 +384,19 @@ superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp)
   free(bepath);
   free(fepath);
   return ret;
+}
+
+/**
+ * Remove the main vhid backend nodes for a given domain.
+ *
+ * @param domp A pointer to the domain information
+ */
+void superxenstore_destroy_backend(dominfo_t *domp)
+{
+  char *bepath;
+
+  bepath = xenstore_root_bepath(domp, SUPERHID_NAME);
+  xs_rm(xs_handle, XBT_NULL, bepath);
 }
 
 /**
@@ -418,6 +437,9 @@ static void spawn(int domid, enum superhid_type type)
   superxenstore_create_usb(&di, &ui);
 }
 
+#define D4         "[0-9a-z][0-9a-z][0-9a-z][0-9a-z]"
+#define MATCH_UUID D4 D4 "-" D4 "-" D4 "-" D4 "-" D4 D4 D4
+
 /**
  * We're watching "/vm" to know when VM statuses change. We spawn
  * device(s) for every running VM that doesn't have a backend (yet).
@@ -434,6 +456,25 @@ void superxenstore_handler(void)
 
   /* Watch away */
   paths = xs_read_watch(xs_handle, &len);
+  if (!fnmatch("/vm/" MATCH_UUID, paths[XS_WATCH_PATH], 0)) {
+    value = xs_read(xs_handle, XBT_NULL, paths[XS_WATCH_PATH], &len);
+    if (value == NULL) {
+      snprintf(path, 256, "/xenmgr/vms/%s/domid", paths[XS_WATCH_PATH] + 4);
+      value = xs_read(xs_handle, XBT_NULL, path, &len);
+      if (value != NULL) {
+        domid = strtol(value, NULL, 10);
+        free(value);
+        slot = superbackend_find_slot(domid);
+        if (slot != -1) {
+          /* The VM is down, but it has a backend. Removing it. */
+          superlog(LOG_DEBUG, "Releasing the backend for domid %d", domid);
+          superbackend_release(slot);
+        }
+      }
+    } else {
+      free(value);
+    }
+  }
   free(paths);
 
   /* List VMs */

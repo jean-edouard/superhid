@@ -83,6 +83,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <getopt.h>
+#include <fnmatch.h>
 #include <xenstore.h>
 #include <xenctrl.h>
 #include <xenbackend.h>
@@ -292,6 +293,7 @@ int  superhid_setup(struct usb_ctrlrequest *setup, char *buf, enum superhid_type
 int  superxenstore_init(void);
 int  superxenstore_create_usb(dominfo_t *domp, usbinfo_t *usbp);
 int  superxenstore_destroy_usb(dominfo_t *domp, usbinfo_t *usbp);
+void superxenstore_destroy_backend(dominfo_t *domp);
 void superxenstore_handler(void);
 void superxenstore_close(void);
 int  superbackend_init(void);
@@ -301,6 +303,8 @@ int  superbackend_create(dominfo_t di);
 bool superbackend_all_pending(struct superhid_backend *superback);
 void superbackend_send_report_to_frontends(struct superhid_report *report,
                                            struct superhid_backend *superback);
+void superbackend_release(int slot);
 int  superplugin_create(struct superhid_backend *superback);
+void superplugin_release(struct superhid_backend *superback);
 
 #endif 	    /* !PROJECT_H_ */

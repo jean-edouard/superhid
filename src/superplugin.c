@@ -549,3 +549,21 @@ int superplugin_create(struct superhid_backend *superback)
 
   return 0;
 }
+
+/**
+ * Close the connection to input_server for a given domain
+ *
+ * @param superback The backend object for the domain
+ */
+void superplugin_release(struct superhid_backend *superback)
+{
+  int domid = superback->di.di_domid;
+
+  superlog(LOG_INFO, "Closing the input socket for domid %d", domid);
+  if (domid == input_grabber) {
+    close(superback->buffers.s);
+    /* Hack: attempt at blocking that domid from instantly re-grabbing
+     * input before dying... */
+    input_grabber = -input_grabber;
+  }
+}
