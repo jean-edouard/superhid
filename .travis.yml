@@ -1,5 +1,11 @@
 language: c
 
+env:
+  global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+   - secure: "GoBhqBSIUirIQbiUSXCN5KtKb8pyI8jJQ2Kez9/a6DDStCtY3HSW7FlSJH1CWXKP0iuKIy5sYlYtETQNyOaaBY2gPxRVRfqDIMv1Lq9cCtjNq+iehMqmCeCUadAYc58aofOAMVIKQ9crxmi5GKJ2huk27O2mPDW5X3x5H46a6C7l9bS+nZQnEqXu6012T5qdVDoUMGRZFhIenHZcpj7Qlfl5EoQJ2W03XsuKcmXmtWTLLn3NtaZDeXx5MQ+F8FYaOnW0YCI89eYjg9q0IhjtfA2BI8K37Hwt/zyk+Hi6/9+FS1bpz4xWYgmEnk4YPivfGhBpqlg+D7NHCs9zSxHsJ53i+8V8ybqodm9Z1SajQjLGW0u3duKTvW2J0sjCJcjukExR/zsEOG0pP7qsd+kvMKS6LKo7UfSIdeXntaRurPl9z+atd94cMxpvuK/A3ScQFI620/Ht060duKb+ImL1iFdKO2cNqCehMSrilV2rV5TIO5JIdALLGtsw107q2LRh3b+Ekq2OFnMBpsv57A69Gzh/+ihAUWx3VNw8Fh1uM99v4aK2t9X8eYew9OjbQQ/kppyO/8oVvwN0W//skWOSXEIv9aEnJ3rLppo0G7Cv/WL5xG0xVXarOC3Q2XAQ8U1MDRyDwixvVzFJ+z+zu1LAcZBOVcz+QEfVn4yTz0tl6c0="
+
 before_install:
 - sudo apt-get update
 - sudo apt-get install -y build-essential autoconf automake libusb-dev libdbus-1-dev libdbus-glib-1-dev libudev-dev libevent-dev
@@ -24,6 +30,17 @@ before_install:
 - make
 - sudo make install
 - cd -
+- echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+
+addons:
+  coverity_scan:
+    project:
+      name: "jean-edouard/superhid"
+      description: "Build submitted via Travis CI"
+    notification_email: jed.openxt@gmail.com
+    build_command_prepend: "./autogen.sh;./configure"
+    build_command: "make"
+    branch_pattern: coverity_scan
 
 script:
 - ./autogen.sh
